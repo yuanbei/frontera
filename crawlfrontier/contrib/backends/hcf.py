@@ -1,3 +1,49 @@
+"""
+HCF Backend
+
+This crawl-frontier backend uses the HCF backend from hubstorage to retrieve
+the new urls to crawl and store back the links extracted.
+
+To activate this backend it needs to be set as BACKEND
+in the frontier settings, i.e.:
+
+BACKEND = 'crawlfrontier.contrib.backends.hcf.HcfBackend'
+
+And the following settings are required:
+
+    * HCF_FRONTIER  - Frontier name for writting and default reading.
+
+The next optional settings can be defined:
+
+    * HCF_CONSUME_FROM_SLOT     - Slot from where the spider will read new URLs.
+    * HCF_CONSUME_FROM_FRONTIER - If set, this is the frontier where batches are read.
+                                    Otherwise use the value of HCF_FRONTIER.
+    * HCF_WRITE_SLOT_PREFIX     - When generating write slot, prepend the given prefix. Empty by default.
+    * HCF_MAX_BATCHES           - Number of batches to be read from HCF, the default is 100
+    * HCF_NUMBER_OF_SLOTS       - This is the number of slots that the middleware will
+                                    use to store the new links. The default is 8.
+
+The next keys can be defined in a Request meta in order to control the behavior
+of the HCF backend:
+
+    use_hcf     - If set to True the request will be stored in the HCF.
+    hcf_request - Dictionary of parameters to be stored in the HCF
+                    with the request fingerprint:
+
+        qdata    Data to be stored along with the fingerprint in the request queue
+        p        Priority - lower priority numbers are returned first. The default is 0
+
+The value of 'qdata' parameter could be retrieved later using
+``response.meta['hcf_request']['qdata']``.
+
+For local runs, project id and apikey are read from the scrapy.cfg config files.
+Alternativelly you can use environment variables:
+
+    * SHUB_APIKEY for setting apikey,
+    * PROJECT_ID for setting project id
+
+"""
+
 import hashlib
 from collections import defaultdict
 
@@ -27,10 +73,11 @@ class HcfBackend(Backend):
 
         self.hcf_frontier = self._get_config(settings, "HS_FRONTIER")
         self.hcf_consume_from_slot = self._get_config(settings, "HS_CONSUME_FROM_SLOT")
-        self.hcf_number_of_slots = settings.get("HS_NUMBER_OF_SLOTS", DEFAULT_HS_NUMBER_OF_SLOTS)
+        self.hcf_consume_from_frontier = settings.get('HCF_CONSUME_FROM_FRONTIER')
+
+        self.hcf_number_of_slots = settings.get("HCF_NUMBER_OF_SLOTS", DEFAULT_HS_NUMBER_OF_SLOTS)
 
         self.hcf_write_slot_prefix = settings.get('HCF_WRITE_SLOT_PREFIX', '')
-        self.hcf_consume_from_frontier = settings.get('HCF_CONSUME_FROM_FRONTIER')
         self.hcf_max_batches = settings.get('HCF_MAX_BATCHES', DEFAULT_MAX_BATCHES)
 
         self.hsclient = HubstorageClient(auth=self.hs_auth)
