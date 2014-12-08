@@ -211,10 +211,11 @@ class HcfBackend(Backend):
             # Add batch to processing_batches only when we processed all links
             self.processing_batches[batch['id']] = batch_ids
 
-        self.manager.logger.backend.debug('Read %d new batches from slot(%s)' %
-            (new_batches, self.hcf_consume_from_slot))
-        self.manager.logger.backend.debug('Read %d new links from slot(%s)' %
-            (num_links, self.hcf_consume_from_slot))
+        if num_links:
+            self.manager.logger.backend.debug('Read %d new batches from slot(%s)' %
+                (new_batches, self.hcf_consume_from_slot))
+            self.manager.logger.backend.debug('Read %d new links from slot(%s)' %
+                (num_links, self.hcf_consume_from_slot))
         return requests
 
     def _get_next_batches(self, max_next_requests, with_flush=False):
@@ -223,11 +224,12 @@ class HcfBackend(Backend):
         if len(self.processing_batches) >= self.hcf_max_batches:
             return
 
-        batch_n, new_batches  = 0, 0
+        batch_n, is_batches  = 0, False
         for batch_n, batch in enumerate(
                 self.fclient.read(self.hcf_consume_from_frontier,
                                   self.hcf_consume_from_slot,
                                   mincount=max_next_requests), 1):
+            is_batches = True
 
             # Get not more than hcf_max_batches from hubstorage
             if self.hcf_max_batches and batch_n == self.hcf_max_batches:
@@ -237,11 +239,10 @@ class HcfBackend(Backend):
             if batch['id'] in self.processing_batches:
                 continue
 
-            new_batches += 1
             yield batch
 
-        # If no new_batches, trying to flush data with hcf client and repeat
-        if not new_batches and not with_flush:
+        # If no batches at all, trying to flush data with hcf client and repeat
+        if not is_batches and not with_flush:
             self._flush()
             self._get_next_batches(max_next_requests, with_flush=True)
 

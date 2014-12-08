@@ -11,7 +11,7 @@ The important characteristic of it is getting spider argument
 among kwargs in the frontier_start():
 it allows to redefine some functionality depending on the spider definition.
 
-Used with Scrapy crawl-frontier middleware to get spider param
+Used with Scrapy crawl-frontier middleware to get spider attributes
 on process_start_requests() event before adding seeds to the frontier.
 """
 
