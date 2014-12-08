@@ -15,13 +15,18 @@ And the following settings are required:
 
 The next optional settings can be defined:
 
-    * HCF_CONSUME_FROM_SLOT     - Slot from where the spider will read new URLs.
+    * HCF_CONSUME_FROM_SLOT     - Slot from where the spider will read new URLs,
+                                    (can be None, then should be redefined with an extension).
     * HCF_CONSUME_FROM_FRONTIER - If set, this is the frontier where batches are read.
                                     Otherwise use the value of HCF_FRONTIER.
-    * HCF_WRITE_SLOT_PREFIX     - When generating write slot, prepend the given prefix. Empty by default.
-    * HCF_MAX_BATCHES           - Number of batches to be read from HCF, the default is 100
+    * HCF_WRITE_SLOT_PREFIX     - When generating write slot, prepend the given prefix.
+                                    Empty by default.
+    * HCF_MAX_BATCHES           - Number of batches to be process in parallel.
+                                    The default is 5.
     * HCF_NUMBER_OF_SLOTS       - This is the number of slots that the middleware will
                                     use to store the new links. The default is 8.
+    * HCF_SAVE_BATCH_SIZE       - New links batch size to be flushed to the hubstorage.
+                                    The default is 1000.
 
 The next keys can be defined in a Request meta in order to control the behavior
 of the HCF backend:
@@ -54,8 +59,8 @@ from crawlfrontier.core import models
 from crawlfrontier.exceptions import NotConfigured
 
 DEFAULT_HS_NUMBER_OF_SLOTS = 8
-DEFAULT_MAX_BATCHES = 1
-SAVE_BATCH_SIZE = 1000
+DEFAULT_MAX_BATCHES = 5
+DEFAULT_SAVE_BATCH_SIZE = 1000
 
 class HcfBackend(Backend):
 
@@ -72,7 +77,6 @@ class HcfBackend(Backend):
 
         self.hcf_frontier = self._get_config(settings, "HS_FRONTIER")
 
-        # hcf_consume_from_slot can be None, but then should be redefined with an extension.
         self.hcf_consume_from_slot = settings.get("HS_CONSUME_FROM_SLOT")
         self.hcf_consume_from_frontier = settings.get('HCF_CONSUME_FROM_FRONTIER')
 
@@ -80,6 +84,7 @@ class HcfBackend(Backend):
 
         self.hcf_write_slot_prefix = settings.get('HCF_WRITE_SLOT_PREFIX', '')
         self.hcf_max_batches = settings.get('HCF_MAX_BATCHES', DEFAULT_MAX_BATCHES)
+        self.hcf_save_batch_size = settings.get('HCF_SAVE_BATCH_SIZE', DEFAULT_SAVE_BATCH_SIZE)
 
         self.hsclient = HubstorageClient(auth=self.hs_auth)
         self.project = self.hsclient.get_project(self.hs_projectid)
@@ -160,7 +165,7 @@ class HcfBackend(Backend):
 
             # Count links count and flush data from time to time
             self.new_links_count += 1
-            if self.new_links_count == SAVE_BATCH_SIZE:
+            if self.new_links_count == self.hcf_save_batch_size:
                 self._flush()
 
             # Store link to the dict as a simple analogue of dupefilter
@@ -255,9 +260,9 @@ class HcfBackend(Backend):
 
                     self.discovered_links[slot].add(rfp)
 
-                    # Flush data for each SAVE_BATCH_SIZE new links count
+                    # Flush data for each new links batch of certain size
                     self.new_links_count += 1
-                    if self.new_links_count == SAVE_BATCH_SIZE:
+                    if self.new_links_count == self.hcf_save_batch_size:
                         self._flush()
 
         self._remove_request_from_queues(page.request)
