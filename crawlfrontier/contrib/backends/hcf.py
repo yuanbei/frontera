@@ -41,7 +41,6 @@ Alternativelly you can use environment variables:
 
     * SHUB_APIKEY for setting apikey,
     * PROJECT_ID for setting project id
-
 """
 
 import hashlib
@@ -72,7 +71,9 @@ class HcfBackend(Backend):
         self.hs_projectid = conf['project_id']
 
         self.hcf_frontier = self._get_config(settings, "HS_FRONTIER")
-        self.hcf_consume_from_slot = self._get_config(settings, "HS_CONSUME_FROM_SLOT")
+
+        # hcf_consume_from_slot can be None, but then should be redefined with an extension.
+        self.hcf_consume_from_slot = settings.get("HS_CONSUME_FROM_SLOT")
         self.hcf_consume_from_frontier = settings.get('HCF_CONSUME_FROM_FRONTIER')
 
         self.hcf_number_of_slots = settings.get("HCF_NUMBER_OF_SLOTS", DEFAULT_HS_NUMBER_OF_SLOTS)
@@ -90,7 +91,7 @@ class HcfBackend(Backend):
             doesn't allow to add already discovered links to new batches
             though it's cleared on restart, we can occasionally do it
 
-            FIXME probably need to clear it somehow for continious run
+            FIXME probably need to clear it somehow for continuous run
                 1) dictionary with ttl
                 2) dictionary with size limit """
         self.discovered_links = defaultdict(set)
@@ -136,12 +137,17 @@ class HcfBackend(Backend):
         """ Initially we need to store initial requests with hub-storage,
             and then get it back with get_next_requests() request.  """
 
-        result = []
+        # Check if we have hcf_consume_from_slot defined
+        if not self.hcf_consume_from_slot:
+            return []
+
         # Don't need store initial links (for restart) if we already have data
         if self._check_if_data():
             self.manager.logger.backend.debug(
                 'Ignoring seeds: already data in HCF')
-            return result
+            return []
+
+        result = []
 
         # Or walking by seed links
         for link in links:
@@ -178,6 +184,10 @@ class HcfBackend(Backend):
     def get_next_requests(self, max_next_requests):
         """ Get a new batch of links from the HCF."""
 
+        # Check if slot is defined
+        if not self.hcf_consume_from_slot:
+            return []
+
         requests, new_batches, num_links = [], 0, 0
 
         for batch in self._get_next_batches(max_next_requests):
@@ -204,9 +214,6 @@ class HcfBackend(Backend):
 
     def _get_next_batches(self, max_next_requests, with_flush=False):
 
-        # Check if slot is defined
-        if not self.hcf_consume_from_slot:
-            return
         # Check if we have some batch stock to process
         if len(self.processing_batches) >= self.hcf_max_batches:
             return
@@ -228,6 +235,7 @@ class HcfBackend(Backend):
             new_batches += 1
             yield batch
 
+        # If no new_batches, trying to flush data with hcf client and repeat
         if not new_batches and not with_flush:
             self._flush()
             self._get_next_batches(max_next_requests, with_flush=True)
