@@ -18,7 +18,7 @@ class BaseFingerprintMiddleware(Middleware):
     def from_manager(cls, manager):
         return cls(manager)
 
-    def frontier_start(self):
+    def frontier_start(self, **kwargs):
         pass
 
     def frontier_stop(self):

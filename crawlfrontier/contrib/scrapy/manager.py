@@ -52,8 +52,8 @@ class ScrapyFrontierManager(object):
     def __init__(self, settings):
         self.manager = FrontierManager.from_settings(settings)
 
-    def start(self):
-        self.manager.start()
+    def start(self, **kwargs):
+        self.manager.start(**kwargs)
 
     def stop(self):
         self.manager.stop()

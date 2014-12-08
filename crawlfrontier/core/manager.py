@@ -152,11 +152,11 @@ class FrontierManager(object):
     def finished(self):
         return self._finished
 
-    def start(self):
+    def start(self, **kwargs):
         assert not self._started, 'Frontier already started!'
         #self.event_log_manager.frontier_start()
         self.logger.manager.debug(self._msg('START'))
-        self._process_components(method_name='frontier_start')
+        self._process_components(method_name='frontier_start', **kwargs)
         self._started = True
 
     def stop(self):

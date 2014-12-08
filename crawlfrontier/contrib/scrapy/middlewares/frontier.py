@@ -51,8 +51,6 @@ class CrawlFrontierSpiderMiddleware(object):
         return cls(crawler, crawler.stats)
 
     def spider_opened(self, spider):
-        if not self.frontier.manager.auto_start:
-            self.frontier.start()
         self.next_requests_task = LoopingCall(self._schedule_next_requests, spider)
         self.next_requests_task.start(self.scheduler_interval)
 
@@ -61,6 +59,8 @@ class CrawlFrontierSpiderMiddleware(object):
         self.frontier.stop()
 
     def process_start_requests(self, start_requests, spider):
+        if not self.frontier.manager.auto_start:
+            self.frontier.start(spider=spider)
         if start_requests:
             self.frontier.add_seeds(list(start_requests))
         return self._get_next_requests()
@@ -128,4 +128,3 @@ class CrawlFrontierDownloaderMiddleware(object):
                                             request=request,
                                             exception=exception,
                                             spider=spider)
-
