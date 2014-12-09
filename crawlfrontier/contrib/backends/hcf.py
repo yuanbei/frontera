@@ -253,23 +253,22 @@ class HcfBackend(Backend):
 
     def page_crawled(self, page, links):
         for link in links:
-            if link.meta.get('use_hcf', False):
-                slot = self._slot_callback(link)
+            slot = self._slot_callback(link)
 
-                # FIXME should we use hash fingerprints only for check?
-                rfp = hashlib.sha1(link.url)
-                if rfp not in self.discovered_links[slot]:
+            # FIXME should we use hash fingerprints only for check?
+            rfp = hashlib.sha1(link.url)
+            if rfp not in self.discovered_links[slot]:
 
-                    hcf_frontier = self.frontier_from_link(link)
-                    hcf_request = self.hcf_request_from_link(link)
-                    self.fclient.add(hcf_frontier, slot, [hcf_request])
+                hcf_frontier = self.frontier_from_link(link)
+                hcf_request = self.hcf_request_from_link(link)
+                self.fclient.add(hcf_frontier, slot, [hcf_request])
 
-                    self.discovered_links[slot].add(rfp)
+                self.discovered_links[slot].add(rfp)
 
-                    # Flush data for each new links batch of certain size
-                    self.new_links_count += 1
-                    if self.new_links_count == self.hcf_save_batch_size:
-                        self._flush()
+                # Flush data for each new links batch of certain size
+                self.new_links_count += 1
+                if self.new_links_count == self.hcf_save_batch_size:
+                    self._flush()
 
         self._remove_request_from_queues(page.request)
         return page
