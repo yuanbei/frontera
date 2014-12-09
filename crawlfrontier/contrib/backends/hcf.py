@@ -21,7 +21,7 @@ The next optional settings can be defined:
                                     Otherwise use the value of HCF_FRONTIER.
     * HCF_WRITE_SLOT_PREFIX     - When generating write slot, prepend the given prefix.
                                     Empty by default.
-    * HCF_MAX_BATCHES           - Number of batches to be process in parallel.
+    * HCF_MAX_PARALLEL_BATCHES  - Number of batches to be process in parallel.
                                     The default is 5.
     * HCF_NUMBER_OF_SLOTS       - This is the number of slots that the middleware will
                                     use to store the new links. The default is 8.
@@ -59,7 +59,7 @@ from crawlfrontier.core import models
 from crawlfrontier.exceptions import NotConfigured
 
 DEFAULT_HS_NUMBER_OF_SLOTS = 8
-DEFAULT_MAX_BATCHES = 5
+DEFAULT_MAX_PARALLEL_BATCHES = 5
 DEFAULT_SAVE_BATCH_SIZE = 1000
 
 class HcfBackend(Backend):
@@ -83,7 +83,7 @@ class HcfBackend(Backend):
         self.hcf_number_of_slots = settings.get("HCF_NUMBER_OF_SLOTS", DEFAULT_HS_NUMBER_OF_SLOTS)
 
         self.hcf_write_slot_prefix = settings.get('HCF_WRITE_SLOT_PREFIX', '')
-        self.hcf_max_batches = settings.get('HCF_MAX_BATCHES', DEFAULT_MAX_BATCHES)
+        self.hcf_max_parallel_batches = settings.get('HCF_MAX_PARALLEL_BATCHES', DEFAULT_MAX_PARALLEL_BATCHES)
         self.hcf_save_batch_size = settings.get('HCF_SAVE_BATCH_SIZE', DEFAULT_SAVE_BATCH_SIZE)
 
         self.hsclient = HubstorageClient(auth=self.hs_auth)
@@ -221,7 +221,7 @@ class HcfBackend(Backend):
     def _get_next_batches(self, max_next_requests, with_flush=False):
 
         # Check if we have some batch stock to process
-        if len(self.processing_batches) >= self.hcf_max_batches:
+        if self._max_parallel_batches_limit():
             return
 
         batch_n, is_batches  = 0, False
@@ -231,8 +231,7 @@ class HcfBackend(Backend):
                                   mincount=max_next_requests), 1):
             is_batches = True
 
-            # Get not more than hcf_max_batches from hubstorage
-            if self.hcf_max_batches and batch_n == self.hcf_max_batches:
+            if self._max_parallel_batches_limit():
                 break
 
             # Skip batches already processing
@@ -245,6 +244,12 @@ class HcfBackend(Backend):
         if not is_batches and not with_flush:
             self._flush()
             self._get_next_batches(max_next_requests, with_flush=True)
+
+    def _max_parallel_batches_limit(self):
+        if self.hcf_max_parallel_batches:
+            if len(self.processing_batches) >= self.hcf_max_parallel_batches:
+                return True
+        return False
 
     def page_crawled(self, page, links):
         for link in links:
