@@ -100,6 +100,9 @@ class HcfBackend(Backend):
                 2) dictionary with size limit """
         self.discovered_links = defaultdict(set)
 
+        # store processing batches ids until next get_next_requests() call
+        self._processing_batch_ids = []
+
         # Used for logs and to control data flushing
         self.new_links_count = 0
         # Used for logs only
@@ -183,6 +186,11 @@ class HcfBackend(Backend):
         if not self.hcf_consume_from_slot:
             return []
 
+        # A get_next_requests() call means that we've read previous requests,
+        # and ready to consume next requests. So at this moment we can delete
+        # previous processing batches and move to the next batches.
+        self._delete_previous_batches()
+
         requests, new_batches, num_links = [], 0, 0
 
         for batch in self._get_next_batches(max_next_requests):
@@ -194,13 +202,8 @@ class HcfBackend(Backend):
                 req = self._request_from_qdata(fingerprint, qdata)
                 requests.append(req)
 
-            # FIXME delete the batch when read all links from it!
-            self.fclient.delete(self.hcf_consume_from_frontier,
-                                self.hcf_consume_from_slot,
-                                [batch['id']])
-            self.manager.logger.backend.debug(
-                'Deleted batch %s in slot(%s)' % (
-                    batch['id'], self.hcf_consume_from_slot))
+            # Store processing batches until the next get_next_requests call
+            self._processing_batch_ids.append(batch['id'])
 
         if num_links:
             self.manager.logger.backend.debug('Read %d new batches from slot(%s)' %
@@ -208,6 +211,18 @@ class HcfBackend(Backend):
             self.manager.logger.backend.debug('Read %d new links from slot(%s)' %
                 (num_links, self.hcf_consume_from_slot))
         return requests
+
+    def _delete_previous_batches(self):
+        """ Delete processing batches from hubstorage. """
+
+        if self._processing_batch_ids:
+            self.manager.logger.backend.debug(
+                'Deleting %s batches in slot(%s)' % (
+                    len(self._processing_batch_ids), self.hcf_consume_from_slot))
+            self.fclient.delete(self.hcf_consume_from_frontier,
+                                self.hcf_consume_from_slot,
+                                self._processing_batch_ids)
+            self._processing_batch_ids = []
 
     def _get_next_batches(self, max_next_requests, with_flush=False):
         is_batches = False
