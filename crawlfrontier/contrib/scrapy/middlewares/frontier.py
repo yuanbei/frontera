@@ -41,6 +41,9 @@ class CrawlFrontierSpiderMiddleware(object):
         self.frontier.stop()
 
     def process_start_requests(self, start_requests, spider):
+        if not self.frontier.manager.auto_start:
+            self.frontier.start(spider=spider)
+
         # Adding seeds on start
         if start_requests:
             self.frontier.add_seeds(start_requests)
