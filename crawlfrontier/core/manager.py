@@ -245,7 +245,7 @@ class FrontierManager(object):
         """
         return self._finished
 
-    def start(self):
+    def start(self, **kwargs):
         """
         Notifies all the components of the frontier start. Typically used for initializations (See \
         :ref:`starting/stopping the frontier <frontier-start-stop>`).
