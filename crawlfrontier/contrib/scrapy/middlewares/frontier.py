@@ -11,7 +11,6 @@ frontier_download_error = object()
 
 # Defaul values
 DEFAULT_FRONTIER_ENABLED = True
-DEFAULT_FRONTIER_LINKS_BATCH_SIZE = 1000
 
 
 class CrawlFrontierSpiderMiddleware(object):
@@ -29,10 +28,6 @@ class CrawlFrontierSpiderMiddleware(object):
         if not frontier_settings:
             raise NotConfigured
         self.frontier = ScrapyFrontierManager(frontier_settings)
-
-        # Scheduler settings
-        self.links_batch_size = crawler.settings.get(
-            'FRONTIER_LINKS_BATCH_SIZE', DEFAULT_FRONTIER_LINKS_BATCH_SIZE)
 
         # Signals
         self.crawler.signals.connect(self.spider_closed, signals.spider_closed)
@@ -76,19 +71,9 @@ class CrawlFrontierSpiderMiddleware(object):
     def _get_next_requests(self, spider):
         """ Get new requests from the manager."""
 
-        requests_count = 0
-        if not self.frontier.manager.finished:
-            thereisdata = True
-            while thereisdata and requests_count < self.links_batch_size:
-                thereisdata = False
-                max_requests = self.links_batch_size - requests_count
-                for req in self.frontier.get_next_requests(max_requests):
-                    thereisdata = True
-                    requests_count += 1
-                    yield req
-        self.frontier.manager.logger.manager.debug(
-            '%d total links read' % requests_count)
-
+        while not self.frontier.manager.finished:
+            for req in self.frontier.get_next_requests():
+                yield req
 
 class CrawlFrontierDownloaderMiddleware(object):
     def __init__(self, crawler):
