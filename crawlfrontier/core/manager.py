@@ -168,8 +168,13 @@ class FrontierManager(object):
 
     def add_seeds(self, seeds):
         self._check_startstop()
-        # FIXME probably seeds should be a generator here
-        assert len(seeds), "Empty seeds list"
+        # FIXME 1) the seeds arg should be a generator here
+        #       2) also, seeds list can be void because of restarts:
+        #       because data cane be already stored in the frontier
+        # assert len(seeds), "Empty seeds list"
+        if not seeds:
+            return
+
         for seed in seeds:
             assert isinstance(seed, self._request_model), "Seed objects must subclass '%s', '%s' found" % \
                                                           (self._request_model.__name__, type(seed).__name__)
