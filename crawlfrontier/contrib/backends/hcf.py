@@ -21,8 +21,6 @@ The next optional settings can be defined:
                                     Otherwise use the value of HCF_FRONTIER.
     * HCF_WRITE_SLOT_PREFIX     - When generating write slot, prepend the given prefix.
                                     Empty by default.
-    * HCF_MAX_PARALLEL_BATCHES  - Number of batches to be process in parallel.
-                                    The default is 5.
     * HCF_NUMBER_OF_SLOTS       - This is the number of slots that the middleware will
                                     use to store the new links. The default is 8.
     * HCF_SAVE_BATCH_SIZE       - New links batch size to be flushed to the hubstorage.

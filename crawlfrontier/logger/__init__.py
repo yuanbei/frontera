@@ -1,9 +1,7 @@
 import logging
-from collections import OrderedDict
 import six
 
 from crawlfrontier.utils.misc import load_object
-import handlers
 
 
 class BaseCategoryLogger(object):
