@@ -60,6 +60,7 @@ DEFAULT_HS_NUMBER_OF_SLOTS = 8
 DEFAULT_MAX_PARALLEL_BATCHES = 5
 DEFAULT_SAVE_BATCH_SIZE = 1000
 
+
 class HcfBackend(Backend):
 
     name = 'HCF Backend'
@@ -128,7 +129,6 @@ class HcfBackend(Backend):
             'Using HCF_CONSUME_FROM_FRONTIER=%s' %
             self.hcf_consume_from_frontier)
 
-
     def add_seeds(self, links):
         """ Initially we need to store initial requests with hub-storage,
             and then get it back with get_next_requests() request.  """
@@ -166,8 +166,8 @@ class HcfBackend(Backend):
                                          meta=link.meta))
         # Flush rest seeds data after loading
         self._flush()
-        self.manager.logger.backend.debug('Added %s seeds to slot(%s)' %
-            (len(result), slot))
+        self.manager.logger.backend.debug(
+            'Added %s seeds to slot(%s)' % (len(result), slot))
         # We need to return Requests list to the frontier manager
         return result
 
@@ -204,10 +204,10 @@ class HcfBackend(Backend):
             self._processing_batch_ids.append(batch['id'])
 
         if num_links:
-            self.manager.logger.backend.debug('Read %d new batches from slot(%s)' %
-                (new_batches, self.hcf_consume_from_slot))
-            self.manager.logger.backend.debug('Read %d new links from slot(%s)' %
-                (num_links, self.hcf_consume_from_slot))
+            self.manager.logger.backend.debug('Read %d new batches from slot(%s)' % (
+                new_batches, self.hcf_consume_from_slot))
+            self.manager.logger.backend.debug('Read %d new links from slot(%s)' % (
+                num_links, self.hcf_consume_from_slot))
         return requests
 
     def _delete_previous_batches(self):
@@ -237,7 +237,6 @@ class HcfBackend(Backend):
         if not is_batches and not with_flush:
             self._flush()
             self._get_next_batches(max_next_requests, with_flush=True)
-
 
     def page_crawled(self, page, links):
         for link in links:

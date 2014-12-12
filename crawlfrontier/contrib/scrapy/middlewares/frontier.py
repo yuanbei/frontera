@@ -78,6 +78,7 @@ class CrawlFrontierSpiderMiddleware(object):
             for req in self.frontier.get_next_requests():
                 yield req
 
+
 class CrawlFrontierDownloaderMiddleware(object):
     def __init__(self, crawler):
         self.crawler = crawler

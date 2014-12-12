@@ -46,7 +46,6 @@ class ScrapyHcfBackend(HcfBackend):
 
     def _slot_callback(self, request):
         if hasattr(self, 'slot_callback'):
-            result = self.slot_callback(request)
             return self.slot_callback(request)
         return super(ScrapyHcfBackend, self)._slot_callback(request)
 
