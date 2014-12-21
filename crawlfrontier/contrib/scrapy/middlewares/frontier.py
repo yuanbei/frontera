@@ -4,6 +4,7 @@ from scrapy.exceptions import NotConfigured, DontCloseSpider
 from scrapy.http import Request
 from scrapy import signals
 
+from crawlfrontier.contrib.scrapy.manager import RequestConversor
 from crawlfrontier.contrib.scrapy.manager import ScrapyFrontierManager
 
 # Signals
@@ -46,7 +47,10 @@ class CrawlFrontierSpiderMiddleware(object):
 
         # Adding seeds on start
         if start_requests:
-            self.frontier.add_seeds(start_requests)
+            #self.frontier.add_seeds(start_requests)
+            for req in start_requests:
+                frontier_req = RequestConversor.scrapy_to_frontier(req)
+                yield RequestConversor.frontier_to_scrapy(frontier_req)
 
         # Start of requests consuming
         for req in self._get_next_requests(spider):
@@ -56,7 +60,10 @@ class CrawlFrontierSpiderMiddleware(object):
         links = []
         for element in result:
             if isinstance(element, Request):
-                links.append(element)
+                if element.meta.get('use_hcf', False):
+                    links.append(element)
+                else:
+                    yield element
             else:
                 yield element
         self.frontier.page_crawled(scrapy_response=response,
@@ -74,8 +81,11 @@ class CrawlFrontierSpiderMiddleware(object):
     def _get_next_requests(self, spider):
         """ Get new requests from the manager."""
 
-        while not self.frontier.manager.finished:
+        is_data = True
+        while not self.frontier.manager.finished and is_data:
+            is_data = False
             for req in self.frontier.get_next_requests():
+                is_data = True
                 yield req
 
 

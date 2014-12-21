@@ -165,7 +165,8 @@ class HcfBackend(Backend):
             result.append(models.Request(url=link.url,
                                          meta=link.meta))
         # Flush rest seeds data after loading
-        self._flush()
+        if self.new_links_count:
+            self._flush()
         self.manager.logger.backend.debug(
             'Added %s seeds to slot(%s)' % (len(result), slot))
         # We need to return Requests list to the frontier manager
@@ -222,7 +223,7 @@ class HcfBackend(Backend):
                                 self._processing_batch_ids)
             self._processing_batch_ids = []
 
-    def _get_next_batches(self, max_next_requests, with_flush=False):
+    def _get_next_batches(self, max_next_requests):
         is_batches = False
         for batch_n, batch in enumerate(
                 self.fclient.read(self.hcf_consume_from_frontier,
@@ -234,9 +235,9 @@ class HcfBackend(Backend):
         # If no batches at all, trying to flush data with hcf client and repeat:
         # we have a min links count to flush, so if we have no data at all,
         # there can be some links to be flushed before get next batches call
-        if not is_batches and not with_flush:
+        if not is_batches and self.new_links_count:
             self._flush()
-            self._get_next_batches(max_next_requests, with_flush=True)
+            self._get_next_batches(max_next_requests)
 
     def page_crawled(self, page, links):
         for link in links:
@@ -265,7 +266,8 @@ class HcfBackend(Backend):
         return request
 
     def frontier_stop(self, reason=None):
-        self._flush()
+        if self.new_links_count:
+            self._flush()
         self.manager.logger.backend.debug(
             "Total links flushed: %d" % self.total_links_count)
 
