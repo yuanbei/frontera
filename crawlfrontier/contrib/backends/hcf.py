@@ -129,54 +129,8 @@ class HcfBackend(Backend):
             'Using HCF_CONSUME_FROM_FRONTIER=%s' %
             self.hcf_consume_from_frontier)
 
-    def add_seeds(self, links):
-        """ Initially we need to store initial requests with hub-storage,
-            and then get it back with get_next_requests() request.  """
-
-        # Check if we have hcf_consume_from_slot defined
-        if not self.hcf_consume_from_slot:
-            return []
-
-        # Don't need store initial links (for restart) if we already have data
-        if self._check_if_data():
-            self.manager.logger.backend.debug(
-                'Ignoring seeds: already data in HCF')
-            return []
-
-        result = []
-
-        # Or walking by seed links
-        for link in links:
-            slot = self._slot_callback(link)
-
-            hcf_frontier, hcf_request = self.hcf_request_from_link(link)
-
-            # Add hcf requests using hubstorage client
-            self.fclient.add(hcf_frontier, slot, [hcf_request])
-
-            # Count links count and flush data for each batch-size links count
-            self.new_links_count += 1
-            if self.new_links_count == self.hcf_save_batch_size:
-                self._flush()
-
-            # Store link to the dict as a simple analogue of dupefilter
-            self.discovered_links[slot].add(link.url)
-
-            result.append(models.Request(url=link.url,
-                                         meta=link.meta))
-        # Flush rest seeds data after loading
-        if self.new_links_count:
-            self._flush()
-        self.manager.logger.backend.debug(
-            'Added %s seeds to slot(%s)' % (len(result), slot))
-        # We need to return Requests list to the frontier manager
-        return result
-
-    def _check_if_data(self):
-        frnt, slot = self.hcf_consume_from_frontier, self.hcf_consume_from_slot
-        if list(self.fclient.read(frnt, slot, 1)):
-            return True
-        return False
+    def add_seeds(self, seeds):
+        pass
 
     def get_next_requests(self, max_next_requests):
         """ Get a new batch of links from the HCF."""
