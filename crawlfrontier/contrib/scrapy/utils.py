@@ -17,12 +17,12 @@ def get_project_conf(check_configured=False, auth=None, project_id=None):
     """
 
     conf = {'project_id': os.environ.get('PROJECT_ID'),
-            'auth': os.environ.get('SHUB_APIKEY') +
-                    ':' if os.environ.get('SHUB_APIKEY') else None}
+            'auth': (os.environ.get('SHUB_APIKEY') +
+                     ':' if os.environ.get('SHUB_APIKEY') else None)}
     try:
         from hworker.bot.hsref import hsref
         conf = {'project_id': hsref.projectid, 'auth': hsref.auth}
-    except Exception, e:
+    except Exception:
         pass
 
     cfg = {}

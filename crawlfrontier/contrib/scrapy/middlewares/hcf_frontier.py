@@ -1,7 +1,8 @@
 from scrapy.http import Request
 
 from crawlfrontier.contrib.scrapy.manager import RequestConversor
-from crawlfrontier.contrib.scrapy.middlewares.frontier import CrawlFrontierSpiderMiddleware 
+from crawlfrontier.contrib.scrapy.middlewares.frontier import CrawlFrontierSpiderMiddleware
+
 
 class HCFCrawlFrontierSpiderMiddleware(CrawlFrontierSpiderMiddleware):
 
