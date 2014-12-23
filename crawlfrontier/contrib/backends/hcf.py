@@ -50,11 +50,12 @@ import hashlib
 from collections import defaultdict
 
 from hubstorage import HubstorageClient
-from toolbox.utils import get_project_conf
 
 from crawlfrontier import Backend
 from crawlfrontier.core import models
 from crawlfrontier.exceptions import NotConfigured
+from crawlfrontier.contrib.scrapy.utils import get_project_conf
+
 
 DEFAULT_HS_NUMBER_OF_SLOTS = 8
 DEFAULT_MAX_PARALLEL_BATCHES = 5
