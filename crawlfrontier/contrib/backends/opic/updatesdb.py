@@ -22,24 +22,25 @@ class UpdatesDBInterface(object):
         pass
 
     @abstractmethod
-    def add(self, page_id, start_time, updates):
+    def add(self, page_id, start_time, end_time, updates):
         """Add new entry for page_id where:
 
         page_id    -- An string which identifies the page
         start_time -- Time in seconds since epoch
+        end_time   -- Time in seconds since epoch
         updates    -- How many updates
         """
         pass
 
     @abstractmethod
-    def increment(self, page_id, updates):
+    def increment(self, page_id, at_time, updates):
         """Increment number of updates"""
         pass
 
     @abstractmethod
     def get(self, page_id):
         """
-        Get start_time and updates for page_id
+        Get start_time, end_time and updates for page_id
         """
         pass
 
@@ -63,6 +64,7 @@ class SQLite(sqlite.Connection, UpdatesDBInterface):
             CREATE TABLE IF NOT EXISTS page_updates (
                 page_id    TEXT UNIQUE,
                 start_time REAL,
+                end_time   REAL,
                 updates    INTEGER
             );
             """
@@ -75,33 +77,34 @@ class SQLite(sqlite.Connection, UpdatesDBInterface):
             """
         )
 
-    def add(self, page_id, start_time, updates):
+    def add(self, page_id, start_time, end_time, updates):
         self._cursor.execute(
             """
-            INSERT OR IGNORE INTO page_updates VALUES (?, ?, ?)
+            INSERT OR IGNORE INTO page_updates VALUES (?, ?, ?, ?)
             """,
             (page_id,
              start_time,
+             end_time,
              updates)
         )
 
-    def increment(self, page_id, updates):
+    def increment(self, page_id, at_time, updates):
         self._cursor.execute(
             """
             UPDATE OR IGNORE page_updates
-            SET updates=updates+?
+            SET updates=updates+?, end_time=?
             WHERE page_id=?
             """,
-            (updates, page_id)
+            (updates, at_time, page_id)
         )
 
     def get(self, page_id):
         return self._cursor.execute(
             """
-            SELECT start_time, updates FROM page_updates
+            SELECT start_time, end_time, updates FROM page_updates
             WHERE page_id=?
             """,
-            page_id
+            (page_id,)
         ).fetchone()
 
     def delete(self, page_id):

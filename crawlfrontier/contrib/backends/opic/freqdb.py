@@ -106,16 +106,19 @@ class SQLite(sqlite.Connection, FreqDBInterface):
         if page_frequency == 0:
             self.delete(page_id)
         else:
-            self._cursor.execute(
-                """
-                UPDATE OR IGNORE page_frequency
-                SET frequency=?, score=score - 1.0/frequency + 1.0/?
-                WHERE page_id=?
-                """,
-                (page_frequency,
-                 page_frequency,
-                 page_id)
-            )
+            if page_id in self:
+                self._cursor.execute(
+                    """
+                    UPDATE OR IGNORE page_frequency
+                    SET frequency=?, score=score - 1.0/frequency + 1.0/?
+                    WHERE page_id=?
+                    """,
+                    (page_frequency,
+                     page_frequency,
+                     page_id)
+                )
+            else:
+                self.add(page_id, page_frequency)
 
     def delete(self, page_id):
         self._cursor.execute(
@@ -142,3 +145,11 @@ class SQLite(sqlite.Connection, FreqDBInterface):
         )
 
         return [p[0] for p in pages]
+
+    def __contains__(self, page_id):
+        return self._cursor.execute(
+            """
+            SELECT page_id FROM page_frequency WHERE page_id=? LIMIT 1
+            """,
+            (page_id,)
+        ).fetchone() is not None

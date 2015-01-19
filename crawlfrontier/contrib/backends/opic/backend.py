@@ -34,8 +34,10 @@ import pagedb
 import hitsdb
 import hashdb
 import updatesdb
+import schedulerdb
 import freqest
 import pagechange
+import scheduler
 
 
 class OpicHitsBackend(Backend):
@@ -54,15 +56,13 @@ class OpicHitsBackend(Backend):
             db_freqs=None,
             db_pages=None,
             db_hits=None,
+            db_scheduler=None,
             freq_estimator=None,
             change_detector=None,
             test=False
     ):
-
         # Adjacency between pages and links
         self._graph = db_graph or graphdb.SQLite()
-        # Frequency database to decide next page to crawl
-        self._freqs = db_freqs or freqdb.SQLite()
         # Additional information (URL, domain)
         self._pages = db_pages or pagedb.SQLite()
         # Implementation of the OPIC algorithm
@@ -72,8 +72,14 @@ class OpicHitsBackend(Backend):
             time_window=1000.0
         )
 
-        self._freqest = freq_estimator
-        self._pagechange = change_detector
+        # Frequency database to decide next page to crawl
+        self._freqs = db_freqs or freqdb.SQLite()
+        # Estimation of page change frequency
+        self._freqest = freq_estimator or freqest.Simple()
+        # Detection of a change inside a page
+        self._pagechange = change_detector or pagechange.BodySHA1()
+        # Algorithm to schedule pages
+        self._scheduler = scheduler.Scheduler(db=db_scheduler)
 
         self._test = test
         self._manager = manager
@@ -119,6 +125,10 @@ class OpicHitsBackend(Backend):
                 os.path.join(workdir, 'hash.sqlite')
             )
 
+            db_scheduler = schedulerdb.SQLite(
+                os.path.join(workdir, 'scheduler.sqlite')
+            )
+
             manager.logger.backend.debug(
                 'OPIC backend workdir: {0}'.format(workdir))
         else:
@@ -128,10 +138,19 @@ class OpicHitsBackend(Backend):
             db_hits = None
             db_updates = None
             db_hash = None
+            db_scheduler = None
+
             manager.logger.backend.debug('OPIC backend workdir: in-memory')
 
-        return cls(manager, db_graph, db_freqs, db_pages, db_hits,
-                   freqest.Simple(db=db_updates),
+        return cls(manager,
+                   db_graph,
+                   db_freqs,
+                   db_pages,
+                   db_hits,
+                   db_scheduler,
+                   freqest.Simple(
+                       db=db_updates,
+                       default_freq=OpicHitsBackend.DEFAULT_FREQ),
                    pagechange.BodySHA1(db=db_hash),
                    test=manager.settings.get('BACKEND_TEST', False))
 
@@ -149,10 +168,39 @@ class OpicHitsBackend(Backend):
         self._freqs.close()
         self._pages.close()
         self._opic.close()
+        self._freqest.close()
+        self._scheduler.close()
 
     # Add pages
     ####################################################################
-    def _add_new_link(self, link, freq):
+    def _update_freqest(self, page_fingerprint, body=None):
+        """Add estimation of page change rate"""
+        # check page changes and frequency estimation
+        if body:
+            page_status = self._pagechange.update(page_fingerprint, body)
+        else:
+            page_status = None
+
+        if page_status is None or page_status == pagechange.Status.NEW:
+            self._freqest.add(page_fingerprint)
+        else:
+            self._freqest.refresh(
+                page_fingerprint, page_status == pagechange.Status.UPDATED)
+
+        # update frequency estimation in scheduler
+        self._scheduler.set_rate(
+            page_fingerprint,
+            self._freqest.frequency(page_fingerprint))
+
+    def _update_page_value(self, page_fingerprint, value=None):
+        if value is None:
+            h_score, a_score = self._opic.get_scores(page_fingerprint)
+        else:
+            a_score = value
+
+        self._scheduler.set_value(page_fingerprint, a_score)
+
+    def _add_new_link(self, link):
         """Add a new node to the graph, if not present
 
         Returns the fingerprint used to add the link
@@ -162,8 +210,10 @@ class OpicHitsBackend(Backend):
         self._opic.add_page(fingerprint)
         self._pages.add(fingerprint,
                         pagedb.PageData(link.url, link.meta['domain']['name']))
-        self._freqs.add(fingerprint, freq)
 
+        self._update_freqest(fingerprint, body=None)
+        self._update_page_value(fingerprint)
+        self._freqs.add(fingerprint, self._scheduler.frequency(fingerprint))
         return fingerprint
 
     # FrontierManager interface
@@ -175,7 +225,7 @@ class OpicHitsBackend(Backend):
         self._pages.start_batch()
 
         for seed in seeds:
-            self._add_new_link(seed, OpicHitsBackend.DEFAULT_FREQ)
+            self._add_new_link(seed)
 
         self._graph.end_batch()
         self._pages.end_batch()
@@ -196,32 +246,19 @@ class OpicHitsBackend(Backend):
         self._pages.start_batch()
         self._graph.start_batch()
         for link in links:
-            # For a new page set its frequency as the hub scores
-            # of the parent
-            link_fingerprint = self._add_new_link(
-                link, page_h)
+            link_fingerprint = self._add_new_link(link)
             self._graph.add_edge(page_fingerprint, link_fingerprint)
-        self._graph.end_batch()
+            self._graph.end_batch()
         self._pages.end_batch()
-
-        # Set crawl frequency according to authority score
-        self._freqs.set(page_fingerprint,
-                        page_a/self._opic.a_mean*self.DEFAULT_FREQ)
 
         # mark page to update
         self._opic.mark_update(page_fingerprint)
 
-        # check page changes and frequency estimation
-        if self._freqest and self._pagechange:
-            page_status = self._pagechange.update(
-                page_fingerprint, response.body)
+        self._update_freqest(page_fingerprint, body=response.body)
 
-            if page_status == pagechange.Status.NEW:
-                self._freqest.add(page_fingerprint,
-                                  OpicHitsBackend.DEFAULT_FREQ)
-            else:
-                self._freqest.refresh(
-                    page_fingerprint, page_status == pagechange.Status.UPDATED)
+        # Set crawl frequency
+        self._freqs.set(page_fingerprint,
+                        self._scheduler.frequency(page_fingerprint))
 
         toc = time.clock()
         self._manager.logger.backend.debug(
@@ -253,11 +290,9 @@ class OpicHitsBackend(Backend):
         tic = time.clock()
 
         h_updated, a_updated = self._opic.update()
-
         for page_id in a_updated:
-            h_score, a_score = self._opic.get_scores(page_id)
-            self._freqs.set(page_id,
-                            a_score/self._opic.a_mean*self.DEFAULT_FREQ)
+            self._update_page_value(page_id)
+            self._freqs.set(page_id, self._scheduler.frequency(page_id))
 
         # build requests for the best scores, which must be strictly positive
         next_pages = self._freqs.get_next_pages(max_n_requests)

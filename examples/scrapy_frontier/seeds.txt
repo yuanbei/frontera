@@ -1,4 +1,5 @@
 #http://scrapinghub.com
-http://diffeo.com
+#http://diffeo.com
+http://thehackernews.com/
 #http://www.google.com
 #http://trec-kba.org/trec-kba-stream-corpus.shtml

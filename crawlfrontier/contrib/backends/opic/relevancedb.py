@@ -135,11 +135,3 @@ class SQLite(sqlite.Connection, RelevanceDBInterface):
                     """
                 )
         )
-
-    def close(self, comit=True):
-        if not self._closed:
-            if comit:
-                self._connection.commit()
-            self._connection.close()
-
-        self._closed = True

@@ -398,25 +398,25 @@ def test_links_lite_db():
 def _test_updates(db):
     """Tests that the given database follows the
     updatesdb.UpdatesDBInterface"""
-    db.add('a', 1.0, 5)
-    db.add('b', 0.0, 4)
-    db.add('c', 3.0, 1)
-    db.add('d', 2.5, 0)
+    db.add('a', 1.0, 2.0, 5)
+    db.add('b', 0.0, 1.0, 4)
+    db.add('c', 3.0, 3.0, 1)
+    db.add('d', 2.5, 3.0, 0)
 
-    assert db.get('a') == (1.0, 5)
-    assert db.get('c') == (3.0, 1)
-    assert db.get('d') == (2.5, 0)
-    assert db.get('b') == (0.0, 4)
+    assert db.get('a') == (1.0, 2.0, 5)
+    assert db.get('c') == (3.0, 3.0, 1)
+    assert db.get('d') == (2.5, 3.0, 0)
+    assert db.get('b') == (0.0, 1.0, 4)
 
     db.delete('d')
     assert db.get('d') is None
 
-    db.increment('a', 3)
-    db.increment('c', 2)
+    db.increment('a', 9.0, 3)
+    db.increment('c', 9.0, 2)
 
-    assert db.get('a') == (1.0, 8)
-    assert db.get('b') == (0.0, 4)
-    assert db.get('c') == (3.0, 3)
+    assert db.get('a') == (1.0, 9.0, 8)
+    assert db.get('b') == (0.0, 1.0, 4)
+    assert db.get('c') == (3.0, 9.0, 3)
 
 
 def test_updates_lite_db():
@@ -431,7 +431,7 @@ def test_updates_lite_db():
 
 
 class TestClock(object):
-    """A clock that can be controlled for testing purposes"""
+    """A clock that can be manually controlled for testing purposes"""
     def __init__(self, t0=0):
         self.t = t0
 
@@ -445,8 +445,8 @@ class TestClock(object):
 def _test_freqest(fq, test_clock):
     """Test frequency estimator"""
     test_clock.set(0.0)
-    fq.add('a', 1.0)
-    fq.add('b', 1.0)
+    fq.add('a')
+    fq.add('b')
 
     for i in xrange(1000):
         test_clock.set(i)
@@ -460,7 +460,7 @@ def _test_freqest(fq, test_clock):
     assert abs(fq.frequency('b') - 0.25) < 1e-2
 
     fq.delete('a')
-    assert fq.frequency('a') == 0
+    assert fq.frequency('a') is None
 
 
 def test_freqest_simple():
