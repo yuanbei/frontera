@@ -3,7 +3,7 @@
 #--------------------------------------------------------
 BACKEND = 'crawlfrontier.contrib.backends.opic.backend.OpicHitsBackend'
 BACKEND_OPIC_WORKDIR = 'crawl-opic'
-MAX_REQUESTS = 20000
+MAX_REQUESTS = 2000000
 MAX_NEXT_REQUESTS = 10
 
 #--------------------------------------------------------

@@ -79,7 +79,7 @@ class OpicHitsBackend(Backend):
         # Detection of a change inside a page
         self._pagechange = change_detector or pagechange.BodySHA1()
         # Algorithm to schedule pages
-        self._scheduler = scheduler.Scheduler(db=db_scheduler)
+        self._scheduler = scheduler.Optimal(db=db_scheduler)
 
         self._test = test
         self._manager = manager

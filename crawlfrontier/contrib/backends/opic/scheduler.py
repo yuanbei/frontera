@@ -3,8 +3,41 @@ The scheduler class computes the optimal refresh frequency for a given set of
 pages
 """
 import math
+from abc import ABCMeta, abstractmethod, abstractproperty
 
 import schedulerdb
+
+
+class SchedulerInterface(object):
+    __metaclass__ = ABCMeta
+
+    @abstractmethod
+    def set_rate(self, page_id, rate_new):
+        """Set change rate for given page"""
+        pass
+
+    @abstractmethod
+    def set_value(self, page_id, value_new):
+        """Set page value for given page"""
+        pass
+
+    @abstractmethod
+    def frequency(self, page_id):
+        """Return optimal refresh frequency for page"""
+        pass
+
+    @abstractmethod
+    def close(self):
+        """Close all databases"""
+        pass
+
+    def get_crawl_rate(self):
+        pass
+
+    def set_crawl_rate(self, value):
+        pass
+
+    crawl_rate = abstractproperty(get_crawl_rate, set_crawl_rate)
 
 
 class WCluster(object):
@@ -221,7 +254,7 @@ class GridFunction(object):
         return y1 + (x - x1)/self.delta*(y2 - y1)
 
 
-class SchedulerSolver(object):
+class OptimalSolver(object):
     @staticmethod
     def _g_eval(x, eps=1e-8, max_iter=1000):
         """Maximization of the Lagrangian relative to the frequency.
@@ -259,7 +292,7 @@ class SchedulerSolver(object):
             verbose   -- If true print convergence info
         """
         # pre-compute the g-function
-        self._g_grid = GridFunction(SchedulerSolver._g_eval, -1.0, -1e-6, 1000)
+        self._g_grid = GridFunction(OptimalSolver._g_eval, -1.0, -1e-6, 1000)
 
         # For debugging
         self.verbose = verbose
@@ -323,12 +356,14 @@ class SchedulerSolver(object):
         return self.f_opt
 
 
-class Scheduler(object):
+class Optimal(SchedulerInterface):
     """Compute the optimal refresh frequency, with a fixed computational
     cost
     """
 
     def __init__(self, n_clusters=100, db=None):
+        super(Optimal, self).__init__()
+
         self._db = db or schedulerdb.SQLite()
 
         self._cluster = WCluster(n_clusters)
@@ -339,8 +374,13 @@ class Scheduler(object):
         # TODO: this should be estimated. It's the crawl rate in Hz.
         # Set to 200 pages/min
         self._crawl_rate = 200.0 / 60.0
-        self._solver = SchedulerSolver()
-        self._changed = True
+        self._solver = OptimalSolver()
+        self._changed = 0
+        self._updated = True
+
+        # When more than this faction of pages has changed either
+        # value or rate then solve again
+        self.changed_proportion = 0.05
 
     @property
     def crawl_rate(self):
@@ -350,15 +390,16 @@ class Scheduler(object):
     @crawl_rate.setter
     def crawl_rate(self, value):
         """Change crawl rate"""
-        self._changed = True
+        self._updated = True
         self._crawl_rate = value
 
     def set_rate(self, page_id, rate_new):
         rate_old, value = self._db.get(page_id)
 
-        self._changed = (rate_new != rate_old)
-        if not self._changed:
+        changed = (rate_new != rate_old)
+        if not changed:
             return
+        self._changed += 1
 
         if rate_old is None:
             if value is not None:
@@ -381,9 +422,10 @@ class Scheduler(object):
     def set_value(self, page_id, value_new):
         rate, value_old = self._db.get(page_id)
 
-        self._changed = (value_new != value_old)
-        if not self._changed:
+        changed = (value_new != value_old)
+        if not changed:
             return
+        self._changed += 1
 
         if value_old is None:
             if rate is not None:
@@ -404,20 +446,22 @@ class Scheduler(object):
                 self._db.set(page_id, None, value_new)
 
     def frequency(self, page_id):
+        """Get the optimal refresh frequency for a page"""
         rate, value = self._db.get(page_id)
         if value is not None and rate is not None:
-            """Get the optimal refresh frequency for a page"""
             if self._cluster.N <= 1:
                 return self._crawl_rate
             else:
-                if self._changed:
+                if self._changed > (self.changed_proportion*self._cluster.N) or\
+                   self._updated:
                     self._solver.solve(
                         self._cluster.w,
                         self._cluster.r,
                         self.crawl_rate/float(self._cluster.N),
                         self._cluster.N
                     )
-
+                self._changed = 0
+                self._updated = False
                 return rate*self._solver.g_opt[
                     self._cluster.cluster_index(value)]
         else:
