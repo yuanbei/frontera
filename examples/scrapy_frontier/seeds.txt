@@ -1,5 +1,6 @@
-#http://scrapinghub.com
-#http://diffeo.com
-http://thehackernews.com/
-#http://www.google.com
-#http://trec-kba.org/trec-kba-stream-corpus.shtml
+http://notwithoutsalt.com
+http://chasingdelicious.com
+http://www.happyolks.com
+http://www.tarteletteblog.com
+http://spoonforkbacon.com
+http://theyearinfood.com
