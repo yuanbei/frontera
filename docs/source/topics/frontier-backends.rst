@@ -224,3 +224,52 @@ For a complete list of all settings used for sqlalchemy backends check the :doc:
 .. _SQLAlchemy: http://www.sqlalchemy.org/
 .. _any databases supported by SQLAlchemy: http://docs.sqlalchemy.org/en/rel_0_9/dialects/index.html
 .. _declarative sqlalchemy model: http://docs.sqlalchemy.org/en/rel_0_9/orm/extensions/declarative.html
+
+OPIC backend
+------------
+The OPIC backend takes its name from the "Online Page Importance
+Computation" algorithm, described in::
+
+    Adaptive On-Line Page Importance Computation 
+    Abiteboul S., Preda M., Cobena G. 
+    2003
+
+The main idea is that we want to crawl pages which are important, and
+this importance depends on which pages links to and which pages are
+linked by the current page in a manner similar to PageRank. Implementation is in
+:class:`OpicHitsBackend <crawlfrontier.contrib.backends.opic.backend.OpicHitsBackend>`. 
+
+
+Apart from the common settings with other backends this backend
+uses the following additional settings:
+
+* BACKEND_OPIC_IN_MEMORY (default False) 
+
+  If True all information will be kept in-memory. This will make it run 
+  faster but also will consume more memory and, more importantly, you 
+  will not be able to resume the crawl after you shut down the spider.
+
+* BACKEND_OPIC_WORKDIR
+
+  If BACKEND_OPIC_IN_MEMORY is False, then all the state information 
+  necessary to resume the crawl will be kept inside this directory. If
+  this directory is not set a default one will be generated in the 
+  current directory following the pattern:: 
+    
+      crawl-opic-DYYYY.MM.DD-THH.mm.SS
+
+  Where YYYY is the current year, MM is the month, etc...
+    
+* BACKEND_TEST
+
+  If True the backend will save some information to inspect after the 
+  databases are closed to test the backend performance.
+
+For more information about the implementations details read the annex
+:doc:`OPIC details <opic-backend>`
+
+.. toctree::
+	 
+   opic-backend
+
+

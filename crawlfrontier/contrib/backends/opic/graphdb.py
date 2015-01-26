@@ -8,7 +8,12 @@ import sqlite
 
 
 class GraphInterface(object):
-    """Interface definition for a Graph database"""
+    """Interface definition for a Graph database
+
+    The graph does not store any aditional data inside the nodes or edges, only
+    the link structure. All the function below just represent nodes as
+    unique identifier strings and edges as pairs of nodes (python tuples).
+    """
     __metaclass__ = ABCMeta
 
     @abstractmethod
@@ -93,7 +98,7 @@ class GraphInterface(object):
 
 
 class SQLite(sqlite.Connection, GraphInterface):
-    """SQLite implementation of GraphInterface"""
+    """SQLite implementation of :class:`GraphInterface`"""
     def __init__(self, db=None):
         super(SQLite, self).__init__(db)
 

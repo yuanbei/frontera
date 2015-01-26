@@ -31,6 +31,7 @@ sys.path.append(path.join(path.dirname(__file__), "_ext"))
 extensions = [
     'sphinx.ext.autodoc',
     'crawlfrontierdocs',
+    'sphinx.ext.mathjax'
 ]
 
 # Add any paths that contain templates here, relative to this directory.

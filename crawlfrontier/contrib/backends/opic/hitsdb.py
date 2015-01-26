@@ -10,7 +10,11 @@ import sqlite
 
 
 class HitsDBInterface(object):
-    """Interface definition for every HITS database"""
+    """Interface definition for every HITS database.
+
+    The keys of this database are page id's, unique string identifiers for each
+    page, and the values are :class:`.HitsScore` instances.
+    """
     __metaclass__ = ABCMeta
 
     @abstractmethod
@@ -25,21 +29,17 @@ class HitsDBInterface(object):
 
     @abstractmethod
     def add(self, page_id, page_score):
-        """Associate page_score with page_id, where:
-
-        page_id    -- An string which identifies the page
-        page_score -- An instance of HitsScore
-        """
+        """Associate page_score with page_id"""
         pass
 
     @abstractmethod
     def get(self, page_id):
-        """Get the HitsScore associated with page_id"""
+        """Get the :class:`.HitsScore` associated with page_id"""
         pass
 
     @abstractmethod
     def set(self, page_id, page_score):
-        """Change the HitsScore associated with page_id"""
+        """Change the :class:`.HitsScore` associated with page_id"""
         pass
 
     @abstractmethod
@@ -54,11 +54,10 @@ class HitsDBInterface(object):
 
     @abstractmethod
     def iteritems(self):
-        """Return an iterator over the tuples (page_id, page_score),
-        where:
+        """Iterate over hits scores
 
-            -page_id    -- An string identifier for the page
-            -page_score -- A HitsScore instance
+        :returns: iterator over pairs -- Each pair has the form
+                  (page_id, page_score)
         """
         pass
 
@@ -122,12 +121,12 @@ class HitsDBInterface(object):
 class HitsScore(object):
     """Just a container for the following (modifiable) fields:
 
-       -h_history -- Accumulated hub cash
-       -h_cash    -- Non-spent hub cash
-       -h_last    -- Total hub cash the last time it was updated
-       -a_history -- Accumulated authority cash
-       -a_cash    -- Non-spent authority cash
-       -a_last    -- Total authority cash the last time it was updated
+       :param h_history: Accumulated hub cash
+       :param h_cash: Non-spent hub cash
+       :param h_last: Total hub cash the last time it was updated
+       :param a_history: Accumulated authority cash
+       :param a_cash: Non-spent authority cash
+       :param a_last: Total authority cash the last time it was updated
     """
     def __init__(self, h_history, h_cash, h_last, a_history, a_cash, a_last):
         self.h_history = h_history
@@ -151,7 +150,7 @@ class HitsScore(object):
 
 
 class SQLite(sqlite.Connection, HitsDBInterface):
-    """SQLite based implementation for HitsDBInterface"""
+    """SQLite based implementation for :class:`.HitsDBInterface`"""
 
     def __init__(self, db=None):
         """Make a new connection to a HITS scores database or, if

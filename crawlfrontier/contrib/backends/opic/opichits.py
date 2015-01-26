@@ -7,6 +7,8 @@ import relevancedb
 
 
 class OpicHits(object):
+    """Implements the OPIC algorithm applied to the HITS scores problem"""
+
     def __init__(
             self,
             db_graph=None,
@@ -14,9 +16,20 @@ class OpicHits(object):
             time_window=None,
             db_relevance=None
     ):
-        """Make a new instance, using db_graph as the graph database and
-        db_scores as the HITS scores database. If None provided will create
-        SQLite in-memory instances
+        """
+        :param db_graph: Read only graph database. If None create a new one
+                         using :class:`SQLite <.graphdb.SQLite>`
+        :param db_scores: Scores database. If None create a new one using
+                         :class:`SQLite <.hitsdb.SQLite>`
+        :param time_window: Ignore cash flow out of this time window.
+                            Set to False/None to ignore.
+        :param db_relevance: Read only relevance database. If None create a
+                             new one using :class:`SQLite <.relevancedb.SQLite>`
+
+        :type db_graph: :class:`GraphInterface <.graphdb.GraphInterface>`
+        :type db_scores: :class:`HitsDBInterface <.hitsdb.HitsDBInterface>`
+        :type time_window: float
+        :type db_relevance: :class:`RelevanceDBInterface <.relevancedb.RelevanceDBInterface>`
         """
         # Web page connectivity information
         self._graph = db_graph or graphdb.SQLite()
@@ -60,11 +73,24 @@ class OpicHits(object):
             self.add_page(page_id)
 
     def mark_update(self, page_id):
-        """Add this to the list of pages to update"""
+        """Add this to the list of pages to update
+
+        To decide which pages we should update next we uuse an heuristic:
+        we select the pages with the highest accumulated authority or hub cash.
+        This function makes possible to externally add a given page to the set
+        of pages to be updated, irrespective of its accumulated cash.
+
+        :param str page_id: Page identification
+        """
         self._to_update.append(page_id)
 
     def add_page(self, page_id):
-        """Add a new page, with fresh score information"""
+        """Add a new page
+
+        :param str page_id: Page identification
+        :returns: :class:`HitsScore <.hitsdb.HitsScore>` --
+                  The new score assigned to the page
+        """
         if page_id not in self._scores:
             self._n_pages += 1
 
@@ -219,10 +245,9 @@ class OpicHits(object):
     def update(self, n_iter=1):
         """Run a full iteration of the OPIC-HITS algorithm
 
-        Returns:
-
-            A pair of lists. The first one contains pages with an updated
-        h_score and the second ones with update a_score.
+        :param int n_iter: number of iterations
+        :returns: pair of lists -- The first one contains pages with an updated
+                  hub score and the second ones with update authority score.
         """
 
         # update proportional to the rate of graph grow
@@ -257,27 +282,33 @@ class OpicHits(object):
         )
 
     def get_scores(self, page_id):
-        """Return a tuple (hub score, authority score) for the given
-        page_id"""
+        """Normalized hub and authority score
+
+        :param str page_id: Page identification
+        :returns: (float, float) -- A tuple (hub score, authority score) for
+                  the given page_id
+        """
 
         return self._relative_score(self._get_page_score(page_id))
 
     def iscores(self):
-        """Iterate over (page_id, hub score, authority score)"""
+        """Iterate over (page id, hub score, authority score)"""
         for page_id, score in self._scores.iteritems():
             yield (page_id,) + self._relative_score(score)
 
     def close(self):
+        """Close any associated database"""
         if not self._closed:
-            self._graph.close()
             self._scores.close()
 
         self._closed = True
 
     @property
     def h_mean(self):
+        """Mean of hub scores"""
         return self._h_total/self._n_pages if self._n_pages > 0 else 1.0
 
     @property
     def a_mean(self):
+        """Mean of authority scores"""
         return self._a_total/self._n_pages if self._n_pages > 0 else 1.0

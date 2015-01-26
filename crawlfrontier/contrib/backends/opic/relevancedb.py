@@ -8,6 +8,11 @@ import sqlite
 
 
 class RelevanceDBInterface(object):
+    """Interface definition for relevance databases.
+
+    Page ID's are unique string identifiers for pages and page scores are float
+    numbers between 0 and 1.
+    """
     __metaclass__ = ABCMeta
 
     @abstractmethod
@@ -32,6 +37,7 @@ class RelevanceDBInterface(object):
 
     @abstractmethod
     def delete(self, page_id):
+        """Delete page"""
         pass
 
     @abstractmethod
@@ -52,7 +58,7 @@ class RelevanceDBInterface(object):
 
 
 class SQLite(sqlite.Connection, RelevanceDBInterface):
-    """A SQLite implementation for the RelevanceDBInterface"""
+    """A SQLite implementation for :class:`RelevanceDBInterface`"""
     def __init__(self, db=None):
         super(SQLite, self).__init__(db)
 

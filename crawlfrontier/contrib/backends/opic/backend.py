@@ -61,6 +61,26 @@ class OpicHitsBackend(Backend):
             change_detector=None,
             test=False
     ):
+        """
+        :param manager: Frontier manager.
+        :param db_graph: Graph database. If None use a new instance of :class:`SQLite <.graphdb.SQLite>`.
+        :param db_freqs: Frequency database. If None use a new instance :class:`SQLite <crawlfrontier.contrib.backends.opic.freqdb.SQLite>`.
+        :param db_pages: Page database. If None us a new instance of :class:`SQLite <crawlfrontier.contrib.backends.opic.pagedb.SQLite>`.
+        :param db_hits: HITS database. If None use a new instance of :class:`SQLite <crawlfrontier.contrib.backends.opic.hitsdb.SQLite>`.
+        :param db_scheduler: Page refresh scheduler database. If None use a new instance of :class:`SQLite <crawlfrontier.contrib.backends.opic.schedulerdb.SQLite>`.
+        :param freq_estimator: Frequency estimator.
+        :param change_detector: Change detector.
+        :param test: If True compute h_scores and a_scores prior to closing.
+
+        :type manager: :class:`FrontierManager <crawlfrontier.core.manager.FrontierManager>`
+        :type db_graph: :class:`GraphInterface <crawlfrontier.contrib.backends.opic.graphdb.GraphInterface>`
+        :type db_freqs: :class:`FreqDBInterface <crawlfrontier.contrib.backends.opic.freqdb.FreqDBInterface>`
+        :type db_pages: :class:`PageDBInterface <crawlfrontier.contrib.backends.opic.pagedb.PageDBInterface>`
+        :type db_hits: :class:`HitsDBInterface <crawlfrontier.contrib.backends.opic.hitsdb.HitsDBInterface>`
+        :type db_scheduler: :class:`SchedulerDBInterface <crawlfrontier.contrib.backends.opic.schedulerdb.SchedulerDBInterface>`
+        :type freq_estimator: :class:`FreqEstimatorInterface <crawlfrontier.contrib.backends.opic.schedulerdb.FreqEstimatorInterface>`
+        :type change_detector: :class:`FreqEstimatorInterface <crawlfrontier.contrib.backends.opic.pagechange.PageChangeInterface>`
+        """
         # Adjacency between pages and links
         self._graph = db_graph or graphdb.SQLite()
         # Additional information (URL, domain)
@@ -87,6 +107,7 @@ class OpicHitsBackend(Backend):
     # FrontierManager interface
     @classmethod
     def from_manager(cls, manager):
+        """Create a new backend using scrapy settings."""
 
         in_memory = manager.settings.get('BACKEND_OPIC_IN_MEMORY', False)
         if not in_memory:
