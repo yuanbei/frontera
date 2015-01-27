@@ -25,8 +25,8 @@ class FreqDBInterface(object):
     def add(self, page_id, page_freq):
         """Associate page_freq with page_id, where:
 
-        page_id   -- An string which identifies the page
-        page_freq -- Refresh frequency of the page.
+        :param str page_id: an string which identifies the page
+        :param float page_freq: refresh frequency of the page (Hz)
         """
         pass
 

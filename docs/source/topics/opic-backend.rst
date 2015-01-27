@@ -655,22 +655,96 @@ And of course, the SQLite already provided implementation:
    :members:
 
 
-.. Scheduler
-.. =========
-.. 
-.. Introduction
-.. ------------
-.. 
-.. 
+Scheduler
+=========
+
+Introduction
+------------
+
+Having a measure of page importance is only the first step. Now we need to 
+consider which page should we be crawling next. In order for the
+scheduler to take that decision it must have some information about
+the pages. We will assume that it has two items of
+information about each page: the change rate of the page and a measure
+of the page value. With this information it must give back to us the
+next pages to crawl. With these considerations we define the interface
+that all schedulers must satisfy:
+
+.. autoclass:: crawlfrontier.contrib.backends.opic.scheduler.SchedulerInterface
+   :members:
+
+BestFirst
+---------
+One possible strategy for an scheduler is just to be greedy: visit the
+next page in the frontier that gives the most value.
+
+TODO: implement and document
+
+Revisiting scheduler
+--------------------
+BestFirst as is has one obvious limitation: it doesn't revisit web
+pages since once a page is crawled it is deleted from the frontier. We
+could modify it, adding an estimation of each web page change rate and
+then reconsidering a page after some time has passed
+depending. 
+
+Another possibility is to use an scheduler which is not greedy,
+but optimal in the sense that maximizes the long term effectiviness of
+the crawler if some assumptions about page change rate hold. This
+scheduler is implemented inside:
+
+.. autoclass:: crawlfrontier.contrib.backends.opic.scheduler.Optimal
+   :members:
+
+As you can see there are two databases associated to the scheduler:
+
+.. image:: _images/optimal_scheduler_arch.svg
+   :align: center
+
+The scheduler database is just for maintaining an association between
+pages and page change rates and values. As usual it can be anything
+that adheres to the following interface:
+
+.. autoclass:: crawlfrontier.contrib.backends.opic.schedulerdb.SchedulerDBInterface
+   :members:
+
+Of course there is an already provided SQLite implementation:
+
+.. autoclass:: crawlfrontier.contrib.backends.opic.schedulerdb.SQLite
+   :members:
+
+The "freqs" database associates pages with optimal frequencies as
+computed by the scheduler. However it not only takes stores the
+association but also allows to query what is the next page to be
+crawled. 
+
+The interface is defined in:
+
+.. autoclass:: crawlfrontier.contrib.backends.opic.freqdb.FreqDBInterface
+   :members:
+
+And the SQLite implementation:
+
+.. autoclass:: crawlfrontier.contrib.backends.opic.freqdb.SQLite
+   :members:
+
+The justification of the optimal scheduler algorithm is quite lengthy
+and so is not included here. If you are interested in the details the it is
+described here:
+
+.. toctree::
+	 
+   scheduler-optimal
+   :maxdepth: 1
+
+
+Page change rate estimator
+==========================
+
+TODO
+
 .. Implementation
 .. --------------
-.. .. automodule:: crawlfrontier.contrib.backends.opic.schedulerdb
-..    :members:
-.. 
-.. .. automodule:: crawlfrontier.contrib.backends.opic.scheduler
-..    :members:
-.. 
-.. .. automodule:: crawlfrontier.contrib.backends.opic.freqdb
 ..    :members:
 .. 
 .. .. automodule:: crawlfrontier.contrib.backends.opic.freqest
@@ -684,18 +758,6 @@ And of course, the SQLite already provided implementation:
 .. 
 .. .. automodule:: crawlfrontier.contrib.backends.opic.updatesdb
 ..    :members:
-.. 
-.. 
-.. All together
-.. ============
-.. 
-.. .. autoclass:: crawlfrontier.contrib.backends.opic.backend.OpicHitsBackend
-..    :members:
-.. 
-.. 
-.. .. automodule:: crawlfrontier.contrib.backends.opic.pagedb
-..    :members:
-.. 
-.. .. automodule:: crawlfrontier.contrib.backends.opic.sqlite
-..    :members:
+ 
+ 
 

@@ -92,14 +92,13 @@ class OpicHitsBackend(Backend):
             time_window=1000.0
         )
 
-        # Frequency database to decide next page to crawl
-        self._freqs = db_freqs or freqdb.SQLite()
         # Estimation of page change frequency
         self._freqest = freq_estimator or freqest.Simple()
         # Detection of a change inside a page
         self._pagechange = change_detector or pagechange.BodySHA1()
         # Algorithm to schedule pages
-        self._scheduler = scheduler.Optimal(db=db_scheduler)
+        self._scheduler = scheduler.Optimal(rate_value_db=db_scheduler,
+                                            freq_db=db_freqs)
 
         self._test = test
         self._manager = manager
@@ -186,7 +185,6 @@ class OpicHitsBackend(Backend):
             self._a_scores = self.a_scores()
 
         self._graph.close()
-        self._freqs.close()
         self._pages.close()
         self._opic.close()
         self._freqest.close()
@@ -234,7 +232,6 @@ class OpicHitsBackend(Backend):
 
         self._update_freqest(fingerprint, body=None)
         self._update_page_value(fingerprint)
-        self._freqs.add(fingerprint, self._scheduler.frequency(fingerprint))
         return fingerprint
 
     # FrontierManager interface
@@ -277,10 +274,6 @@ class OpicHitsBackend(Backend):
 
         self._update_freqest(page_fingerprint, body=response.body)
 
-        # Set crawl frequency
-        self._freqs.set(page_fingerprint,
-                        self._scheduler.frequency(page_fingerprint))
-
         toc = time.clock()
         self._manager.logger.backend.debug(
             'PROFILE PAGE_CRAWLED time: {0:.2f}'.format(toc - tic))
@@ -288,7 +281,7 @@ class OpicHitsBackend(Backend):
     # FrontierManager interface
     def request_error(self, page, error):
         """Remove page from frequency db"""
-        self._freqs.delete(page.meta['fingerprint'])
+        self._scheduler.delete(page.meta['fingerprint'])
 
     # Retrieve pages
     ####################################################################
@@ -313,10 +306,9 @@ class OpicHitsBackend(Backend):
         h_updated, a_updated = self._opic.update()
         for page_id in a_updated:
             self._update_page_value(page_id)
-            self._freqs.set(page_id, self._scheduler.frequency(page_id))
 
         # build requests for the best scores, which must be strictly positive
-        next_pages = self._freqs.get_next_pages(max_n_requests)
+        next_pages = self._scheduler.get_next_pages(max_n_requests)
         next_requests = map(self._get_request_from_id, next_pages)
 
         toc = time.clock()

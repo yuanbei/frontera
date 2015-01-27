@@ -6,9 +6,11 @@ import math
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 import schedulerdb
+import freqdb
 
 
 class SchedulerInterface(object):
+    """Interface that must be satisfied by all schedulers"""
     __metaclass__ = ABCMeta
 
     @abstractmethod
@@ -22,8 +24,13 @@ class SchedulerInterface(object):
         pass
 
     @abstractmethod
-    def frequency(self, page_id):
-        """Return optimal refresh frequency for page"""
+    def delete(self, page_id):
+        """Remove page from scheduler"""
+        pass
+
+    @abstractmethod
+    def get_next_pages(self, n_pages):
+        """Return next pages to crawl"""
         pass
 
     @abstractmethod
@@ -37,6 +44,7 @@ class SchedulerInterface(object):
     def set_crawl_rate(self, value):
         pass
 
+    """Number of pages per second that can be crawled"""
     crawl_rate = abstractproperty(get_crawl_rate, set_crawl_rate)
 
 
@@ -51,7 +59,7 @@ class WCluster(object):
     def __init__(self, n_clusters=100):
         """Initialize clusters
 
-        n_clusters -- Number of clusters to use
+        :param int n_clusters: Number of clusters to use
         """
         self.n_clusters = n_clusters
         # Page change rates
@@ -62,7 +70,7 @@ class WCluster(object):
         self.N = 0
 
     def cluster_index(self, w):
-        """For the given value 'w', find the cluster index"""
+        """For the given page value, find the cluster index"""
         return int(math.ceil(w*self.n_clusters)) - 1
 
     def add(self, page_value, page_rate):
@@ -89,19 +97,27 @@ class WCluster(object):
 
 
 def bracket_min(f, xmin, xmax, max_iter=400):
-    """Given a function 'f' it tries to find three points, xa, xb, xc, such that:
-        f(xa) > f(xb)
-        f(xc) > f(xc)
-        xa < xb < xc
+    """Given a function it tries to find three points such that the middle one
+    is the minimum of the three.
+
+    More exactly it tries to find xa, xb, xc in such a way that::
+
+       xa, xb, xc, such that
+       f(xa) > f(xb)
+       f(xc) > f(xc)
+       xa < xb < xc
 
     xmin and xmax are used to set the initial interval to search in.
     The search could fail (if for example the function is monotonic), and so
     the max_iter parameter sets the maximum number of function evaluations to
     try.
 
-    Returns:
-       Two triples if success: ((xa, xb, xc), (fa, fb, fc))
-       None otherwise.
+    :param function f: function to bracket
+    :param float xmin: left side of the start interval
+    :param float xmax: right side of the start interval
+
+    :returns: a pair of triples -- if success: ((xa, xb, xc), (fa, fb, fc))
+              None otherwise.
     """
 
     xa = xmin
@@ -138,26 +154,27 @@ def bracket_min(f, xmin, xmax, max_iter=400):
 
 def golden_section_search(
         f, xmin, xmax, eps=1e-8, verbose=False):
-    """Find the minimum of 'f' using the golden section search algorithm
+    """Find the minimum of a function using the golden section search algorithm
 
-    Arguments:
-        xmin, xmax -- Start search inside this interval
-        eps        -- Required precision. Stop when the minimum is found inside
-                      an interval with length less than this value.
-        verbose    -- If true print convergence results
+    :param function f: function to bracket
+    :param float xmin: left side of the start interval
+    :param float xmax: right side of the start interval
+    :param float eps: required precision. Stop when the minimum is found inside
+                      an interval with length less than this value
+    :param bool verbose: If true print convergence results
 
-    Returns:
-        (xa, xb, xc), (fa, fb, fc) with:
+    :returns: a pair of triples -- (xa, xb, xc), (fa, fb, fc) or None if failure
 
-            f(xa) > f(xb)
-            f(xc) > f(xc)
-            xa < xb < xc
+    The returned values obey::
 
-        And:
-            |xc - xa| < eps
+       f(xa) > f(xb)
+       f(xc) > f(xc)
+       xa < xb < xc
 
-        None if failure. This only happens if the search could not be
-        initialized, veacuse otherwise the algorithm is assured to converge.
+       |xc - xa| < eps
+
+    Failure can happen only if the search could not be initialized, because
+    otherwise the algorithm is sure to converge.
     """
 
     # (1 - R)/R = phi = golden ratio
@@ -218,12 +235,13 @@ def golden_section_search(
 
 class GridFunction(object):
     """Precompute function inside a grid"""
-    def __init__(self, f, xmin, xmax, N):
-        """Initialize with the following arguments:
 
-        f          -- Function to be pre-computed
-        xmin, xmax -- Domain for the function: [xmin, xmax]
-        N          -- Divide [xmin, xmax] in N subintervals
+    def __init__(self, f, xmin, xmax, N):
+        """
+        :param function f: function to be pre-computed
+        :param float xmin: domain for the function inside [xmin, xmax]
+        :param float xmax: domain for the function inside [xmin, xmax]
+        :param int N: divide [xmin, xmax] in N subintervals
         """
         self.xmin = xmin
         self.xmax = xmax
@@ -234,12 +252,12 @@ class GridFunction(object):
             self._values.append(f(xmin + i*self.delta))
 
     def __call__(self, x):
-        """Evaluate function at 'x' using linear interpolation
+        """Evaluate function using linear interpolation
 
         If x not in [xmin, xmax] use extrapolation. Use with care.
 
-        Returns:
-            The value f(x) of the function at x
+        :param float x: where to evaluate the function
+        :returns: float -- value of the function at x
         """
         # i is the index of the subinterval
         #                  x
@@ -283,14 +301,9 @@ class OptimalSolver(object):
     def __init__(self, verbose=False):
         """Initialize the solver.
 
-        Arguments:
-            values    -- page values ('w' coefficients, with 0 < w <= 1)
-            rates     -- page rates ('r' or 'lambda' coefficients, with r > 0)
-            frequency -- average page frequency. The solution obeys the
-                         constraint:
-                             mean(f) = frequency
-            verbose   -- If true print convergence info
+        :param bool verbose: If True print convergence info
         """
+
         # pre-compute the g-function
         self._g_grid = GridFunction(OptimalSolver._g_eval, -1.0, -1e-6, 1000)
 
@@ -307,6 +320,16 @@ class OptimalSolver(object):
             return self._g_grid(x)
 
     def solve(self, values, rates, frequency, n_pages):
+        """Get frequencies that maximize page value per unit of time
+
+        :param list values: a list of page values (float in (0,1])
+        :param list rates: a list of page change rates (float > 0)
+        :param n_pages: number of pages
+
+        It must be that:
+
+            n_pages >= len(values) == len(rates)
+        """
         K = len(values)
         N = n_pages
 
@@ -361,13 +384,14 @@ class Optimal(SchedulerInterface):
     cost
     """
 
-    def __init__(self, n_clusters=100, db=None):
+    def __init__(self, n_clusters=100, rate_value_db=None, freq_db=None):
         super(Optimal, self).__init__()
 
-        self._db = db or schedulerdb.SQLite()
+        self._rv = rate_value_db or schedulerdb.SQLite()
+        self._freqs = freq_db or freqdb.SQLite()
 
         self._cluster = WCluster(n_clusters)
-        for rate, value in self._db.iter():
+        for rate, value in self._rv.iter():
             if rate and value:
                 self._cluster.add(value, rate)
 
@@ -394,7 +418,7 @@ class Optimal(SchedulerInterface):
         self._crawl_rate = value
 
     def set_rate(self, page_id, rate_new):
-        rate_old, value = self._db.get(page_id)
+        rate_old, value = self._rv.get(page_id)
 
         changed = (rate_new != rate_old)
         if not changed:
@@ -404,23 +428,26 @@ class Optimal(SchedulerInterface):
         if rate_old is None:
             if value is not None:
                 # (None, value) -> (rate_new, value)
-                self._db.set(page_id, rate_new, value)
+                self._rv.set(page_id, rate_new, value)
                 self._cluster.add(value, rate_new)
+                self._freqs.add(page_id, self.frequency(page_id))
             else:
                 # (None, None) -> (rate_new, None)
-                self._db.add(page_id, rate_new, None)
+                self._rv.add(page_id, rate_new, None)
         else:
             if value is not None:
                 # (rate_old, value) -> (rate_new, value)
-                self._db.set(page_id, rate_new, value)
+                self._rv.set(page_id, rate_new, value)
                 self._cluster.delete(value, rate_old)
                 self._cluster.add(value, rate_new)
+                self._freqs.set(page_id, self.frequency(page_id))
             else:
                 # (rate_old, None) -> (rate_new, None)
-                self._db.set(page_id, rate_new, None)
+                self._rv.set(page_id, rate_new, None)
+
 
     def set_value(self, page_id, value_new):
-        rate, value_old = self._db.get(page_id)
+        rate, value_old = self._rv.get(page_id)
 
         changed = (value_new != value_old)
         if not changed:
@@ -430,24 +457,26 @@ class Optimal(SchedulerInterface):
         if value_old is None:
             if rate is not None:
                 # (rate, None) -> (rate, value_new)
-                self._db.set(page_id, rate, value_new)
+                self._rv.set(page_id, rate, value_new)
                 self._cluster.add(value_new, rate)
+                self._freqs.add(page_id, self.frequency(page_id))
             else:
                 # (None, None) -> (None, value_new)
-                self._db.add(page_id, None, value_new)
+                self._rv.add(page_id, None, value_new)
         else:
             if rate is not None:
                 # (rate, value_old) -> (rate, value_new)
-                self._db.set(page_id, rate, value_new)
+                self._rv.set(page_id, rate, value_new)
                 self._cluster.delete(value_old, rate)
                 self._cluster.add(value_new, rate)
+                self._freqs.set(page_id, self.frequency(page_id))
             else:
                 # (None, value_old) -> (None, value_new)
-                self._db.set(page_id, None, value_new)
+                self._rv.set(page_id, None, value_new)
 
     def frequency(self, page_id):
         """Get the optimal refresh frequency for a page"""
-        rate, value = self._db.get(page_id)
+        rate, value = self._rv.get(page_id)
         if value is not None and rate is not None:
             if self._cluster.N <= 1:
                 return self._crawl_rate
@@ -467,5 +496,18 @@ class Optimal(SchedulerInterface):
         else:
             return None
 
+    def get_next_pages(self, n_pages):
+        return self._freqs.get_next_pages(n_pages)
+
+    def delete(self, page_id):
+        rate, value = self._rv.get(page_id)
+        if rate is not None and value is not None:
+            self._cluster.delete(value, rate)
+            self._rv.delete(page_id)
+            self._freqs.delete(page_id)
+
+            self._changed += 1
+
     def close(self):
-        self._db.close()
+        self._rv.close()
+        self._freqs.close()
