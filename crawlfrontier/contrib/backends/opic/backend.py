@@ -17,7 +17,7 @@ in:
     1998
 
 The basic idea of this backend is to crawl pages with a frequency
-proportional to a weighted average of the hub and authority scores.
+proportional to the page importance and change rate.
 """
 import datetime
 import os
@@ -53,33 +53,34 @@ class OpicHitsBackend(Backend):
             self,
             manager,
             db_graph=None,
-            db_freqs=None,
             db_pages=None,
             db_hits=None,
-            db_scheduler=None,
+            scheduler=None,
             freq_estimator=None,
             change_detector=None,
             test=False
     ):
         """
         :param manager: Frontier manager.
-        :param db_graph: Graph database. If None use a new instance of :class:`SQLite <.graphdb.SQLite>`.
-        :param db_freqs: Frequency database. If None use a new instance :class:`SQLite <crawlfrontier.contrib.backends.opic.freqdb.SQLite>`.
-        :param db_pages: Page database. If None us a new instance of :class:`SQLite <crawlfrontier.contrib.backends.opic.pagedb.SQLite>`.
-        :param db_hits: HITS database. If None use a new instance of :class:`SQLite <crawlfrontier.contrib.backends.opic.hitsdb.SQLite>`.
-        :param db_scheduler: Page refresh scheduler database. If None use a new instance of :class:`SQLite <crawlfrontier.contrib.backends.opic.schedulerdb.SQLite>`.
+        :param db_graph: Graph database.
+             If None use a new instance of :class:`.graphdb.SQLite`
+        :param db_pages: Page database. If None us a new instance of
+             :class:`.pagedb.SQLite`.
+        :param db_hits: HITS database. If None use a new instance of
+             :class:`.hitsdb.SQLite`.
+        :param scheduler: Decides which page to crawl next
         :param freq_estimator: Frequency estimator.
         :param change_detector: Change detector.
-        :param test: If True compute h_scores and a_scores prior to closing.
+        :param bool test: If True compute h_scores and a_scores prior to
+             closing.
 
         :type manager: :class:`FrontierManager <crawlfrontier.core.manager.FrontierManager>`
-        :type db_graph: :class:`GraphInterface <crawlfrontier.contrib.backends.opic.graphdb.GraphInterface>`
-        :type db_freqs: :class:`FreqDBInterface <crawlfrontier.contrib.backends.opic.freqdb.FreqDBInterface>`
-        :type db_pages: :class:`PageDBInterface <crawlfrontier.contrib.backends.opic.pagedb.PageDBInterface>`
-        :type db_hits: :class:`HitsDBInterface <crawlfrontier.contrib.backends.opic.hitsdb.HitsDBInterface>`
-        :type db_scheduler: :class:`SchedulerDBInterface <crawlfrontier.contrib.backends.opic.schedulerdb.SchedulerDBInterface>`
-        :type freq_estimator: :class:`FreqEstimatorInterface <crawlfrontier.contrib.backends.opic.schedulerdb.FreqEstimatorInterface>`
-        :type change_detector: :class:`FreqEstimatorInterface <crawlfrontier.contrib.backends.opic.pagechange.PageChangeInterface>`
+        :type db_graph: :class:`GraphInterface <.graphdb.GraphInterface>`
+        :type db_pages: :class:`PageDBInterface <.pagedb.PageDBInterface>`
+        :type db_hits: :class:`HitsDBInterface <.hitsdb.HitsDBInterface>`
+        :type scheduler: :class:`SchedulerInterface <.scheduler.SchedulerInterface>`
+        :type freq_estimator: :class:`FreqEstimatorInterface <.schedulerdb.FreqEstimatorInterface>`
+        :type change_detector: :class:`PageChangeInterface <.pagechange.PageChangeInterface>`
         """
         # Adjacency between pages and links
         self._graph = db_graph or graphdb.SQLite()
@@ -97,8 +98,7 @@ class OpicHitsBackend(Backend):
         # Detection of a change inside a page
         self._pagechange = change_detector or pagechange.BodySHA1()
         # Algorithm to schedule pages
-        self._scheduler = scheduler.Optimal(rate_value_db=db_scheduler,
-                                            freq_db=db_freqs)
+        self._scheduler = scheduler or scheduler.Optimal()
 
         self._test = test
         self._manager = manager
@@ -125,53 +125,32 @@ class OpicHitsBackend(Backend):
             if not os.path.isdir(workdir):
                 os.mkdir(workdir)
 
-            db_graph = graphdb.SQLite(
-                os.path.join(workdir, 'graph.sqlite')
-            )
-            db_pages = pagedb.SQLite(
-                os.path.join(workdir, 'pages.sqlite')
-            )
-            db_freqs = freqdb.SQLite(
-                os.path.join(workdir, 'freqs.sqlite')
-            )
-            db_hits = hitsdb.SQLite(
-                os.path.join(workdir, 'hits.sqlite')
-            )
-
-            db_updates = updatesdb.SQLite(
-                os.path.join(workdir, 'updates.sqlite')
-            )
-            db_hash = hashdb.SQLite(
-                os.path.join(workdir, 'hash.sqlite')
-            )
-
-            db_scheduler = schedulerdb.SQLite(
-                os.path.join(workdir, 'scheduler.sqlite')
-            )
-
             manager.logger.backend.debug(
                 'OPIC backend workdir: {0}'.format(workdir))
         else:
-            db_graph = None
-            db_pages = None
-            db_freqs = None
-            db_hits = None
-            db_updates = None
-            db_hash = None
-            db_scheduler = None
-
+            workdir = None
             manager.logger.backend.debug('OPIC backend workdir: in-memory')
 
+        def in_workdir(db, name):
+            if workdir is None:
+                return db()
+            else:
+                return db(os.path.join(workdir, name))
+
         return cls(manager,
-                   db_graph,
-                   db_freqs,
-                   db_pages,
-                   db_hits,
-                   db_scheduler,
-                   freqest.Simple(
-                       db=db_updates,
+                   db_graph=in_workdir(graphdb.SQLite, 'graph.sqlite'),
+                   db_pages=in_workdir(pagedb.SQLite, 'pages.sqlite'),
+                   db_hits=in_workdir(hitsdb.SQLite, 'hits.sqlite'),
+                   scheduler=scheduler.Optimal(
+                       rate_value_db=in_workdir(
+                           schedulerdb.SQLite, 'scheduler.sqlite'),
+                       freq_db=in_workdir(freqdb.SQLite, 'freqs.sqlite')
+                   ),
+                   freq_estimator=freqest.Simple(
+                       db=in_workdir(updatesdb.SQLite, 'updates.sqlite'),
                        default_freq=OpicHitsBackend.DEFAULT_FREQ),
-                   pagechange.BodySHA1(db=db_hash),
+                   change_detector=pagechange.BodySHA1(
+                       db=in_workdir(hashdb.SQLite, 'hash.sqlite')),
                    test=manager.settings.get('BACKEND_TEST', False))
 
     # FrontierManager interface

@@ -537,6 +537,7 @@ And make the approximation:
 
 
 We call the accumulated page refresh rate inside the cluster :math:`k` as:
+
 .. math::
 
    \Lambda [k] = \sum_{i \in I[k]}\lambda_i
@@ -559,6 +560,13 @@ can assume that :math:`0 < w_i \le 1` and divide this interval equally in
    
    W[k] &= \frac{1}{2N}(2k-1) \\ I[k] &= \left\{i:
    \frac{1}{N}(k-1) < w_i \le \frac{1}{N}k \right\}
+
+
+Another possibility would be doing some kind of online k-means::
+
+   Web-Scale K-Means Clustering
+   D. Sculley
+   
 
 
 Implementation

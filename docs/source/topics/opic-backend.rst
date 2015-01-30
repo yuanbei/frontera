@@ -2,8 +2,8 @@
 OPIC Details
 ============
 
-HITS
-====
+HITS algorithm
+==============
 
 Introduction
 ------------
@@ -276,8 +276,8 @@ We finally end making some comments:
   scaling constant, and so the method converge to the correct scores.
 
 
-OPIC
-====
+OPIC algorithm
+==============
 
 Introduction
 ------------
@@ -495,6 +495,16 @@ is the total amount of cash, that is, the sum of the hub and authority
 cash.
 
 
+If you want to see how OPIC compares against the power method the
+following document shows a comparison between the two:
+
+.. toctree::
+   :hidden:
+
+   opic-precision
+
+:doc:`OPIC vs power method <opic-precision>`
+
 Adaptive OPIC
 -------------
 
@@ -517,7 +527,6 @@ taken in this implementation.
 
 Notice that the adaptive version has introduced a new parameter: a
 time window outside of which we should ignore history.
-
 
 Adding external relevance measure
 ---------------------------------
@@ -592,6 +601,8 @@ adaptive version, and 3 external database components:
 The facilitate adding different database backends their interface has
 been extracted in different abstract metaclasses.
 
+.. _graph-database:
+
 Graph database
 ~~~~~~~~~~~~~~
 
@@ -633,6 +644,8 @@ interface:
 
 .. autoclass:: crawlfrontier.contrib.backends.opic.relevancedb.SQLite
    :members:
+
+.. _hits-scores-db:
 
 HITS scores database
 ~~~~~~~~~~~~~~~~~~~~
@@ -680,6 +693,8 @@ next page in the frontier that gives the most value.
 
 TODO: implement and document
 
+.. _revisiting-scheduler:
+
 Revisiting scheduler
 --------------------
 BestFirst as is has one obvious limitation: it doesn't revisit web
@@ -711,7 +726,6 @@ that adheres to the following interface:
 Of course there is an already provided SQLite implementation:
 
 .. autoclass:: crawlfrontier.contrib.backends.opic.schedulerdb.SQLite
-   :members:
 
 The "freqs" database associates pages with optimal frequencies as
 computed by the scheduler. However it not only takes stores the
@@ -733,31 +747,45 @@ and so is not included here. If you are interested in the details the it is
 described here:
 
 .. toctree::
+   :maxdepth: 1
 	 
    scheduler-optimal
-   :maxdepth: 1
 
+.. _page-change-estimator:
 
 Page change rate estimator
 ==========================
 
-TODO
+Right now it is assumed that the pages probability of change follow a
+Poisson distribution. The details are given in the description of the
+scheduler algorithm :doc:`scheduler-optimal`.
 
-.. Implementation
-.. --------------
-..    :members:
-.. 
-.. .. automodule:: crawlfrontier.contrib.backends.opic.freqest
-..    :members:
-.. 
-.. .. automodule:: crawlfrontier.contrib.backends.opic.hashdb
-..    :members:
-.. 
-.. .. automodule:: crawlfrontier.contrib.backends.opic.pagechange
-..    :members:
-.. 
-.. .. automodule:: crawlfrontier.contrib.backends.opic.updatesdb
-..    :members:
- 
- 
+As always any implementation satisfying the following interface can be
+used:
 
+.. autoclass:: crawlfrontier.contrib.backends.opic.freqest.FreqEstimatorInterface
+   :members:
+
+And we already have a working SQLite implementation, which just counts
+the number of updates in a given time interval:
+
+.. autoclass:: crawlfrontier.contrib.backends.opic.freqest.Simple
+   :members:
+
+
+The frequency estimator expects as input whether or not a page has
+changed but does not make any assumption of what constitutes a change
+since this is the responsability of a page change estimator, which has
+a very simple interface: given a page and its body returns True if the
+change has changed:
+
+.. autoclass:: crawlfrontier.contrib.backends.opic.pagechange.PageChangeInterface
+   :members:
+
+The current implementation is very simple since it just tests for any
+change in the body of the page by computing its hash. Notice that very
+simple changes, which don't really add new content, will be detected
+as a change. 
+
+.. autoclass:: crawlfrontier.contrib.backends.opic.pagechange.BodySHA1
+   :members:

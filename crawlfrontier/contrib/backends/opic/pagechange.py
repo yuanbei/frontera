@@ -14,6 +14,7 @@ class Status(object):
 
 
 class PageChangeInterface(object):
+    """Interface for all page change detectors"""
     __metaclass__ = ABCMeta
 
     @abstractmethod

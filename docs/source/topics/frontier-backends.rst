@@ -237,11 +237,24 @@ Computation" algorithm, described in::
 The main idea is that we want to crawl pages which are important, and
 this importance depends on which pages links to and which pages are
 linked by the current page in a manner similar to PageRank. Implementation is in
-:class:`OpicHitsBackend <crawlfrontier.contrib.backends.opic.backend.OpicHitsBackend>`. 
 
+.. autoclass:: crawlfrontier.contrib.backends.opic.backend.OpicHitsBackend
 
-Apart from the common settings with other backends this backend
-uses the following additional settings:
+For more information about the implementations details read the annex
+:doc:`OPIC details <opic-backend>`
+
+.. toctree::
+   :maxdepth: 2
+
+   opic-backend
+
+Configuration
+~~~~~~~~~~~~~
+
+The constructor has a lot of arguments, but they will automatically
+filled correctly from global settings. Apart from the common settings
+with other backends this backend uses the following additional
+settings:
 
 * BACKEND_OPIC_IN_MEMORY (default False) 
 
@@ -265,11 +278,40 @@ uses the following additional settings:
   If True the backend will save some information to inspect after the 
   databases are closed to test the backend performance.
 
-For more information about the implementations details read the annex
-:doc:`OPIC details <opic-backend>`
+.. _opic-databases:
 
-.. toctree::
-	 
-   opic-backend
+Persistence
+~~~~~~~~~~~
+
+The following SQLite databases are generated inside the
+BACKEND_OPIC_WORKDIR:
+
+* graph.sqlite: the graph database. See :ref:`graph-database`.
+
+* freqs.sqlite: the output of the scheduler. How frequently each page
+  should be crawled. See :ref:`revisiting-scheduler`.
+
+* hash.sqlite: a hash of the body of each page the last time it was
+  visited. It allows to track if a page has changed. See
+  :ref:`page-change-estimator`
+
+* hits.sqlite: the HITS score information and additional information
+  for the OPIC algorithm. See :ref:`hits-scores-db`.
+
+* pages.sqlite: additional info about pages, like URL and domain.
+
+* scheduler.sqlite: page value and page change rate used by the
+  scheduler algorithm. See :ref:`revisiting-scheduler`.
+
+* updates.sqlite: number of updates in a given interval of time. Used
+  for page change rate estimation. See  :ref:`page-change-estimator`
+
+
+Since they are standard SQLite databases they can be accessed using
+any tool of your choice (for example `sqlitebrowser
+<http://sqlitebrowser.org/>`_) which is useful for debugging or interfacing
+with other tools. An example would be accesing the data inside the
+databases to compare the precision of OPIC and the power method, like
+it's explained in :doc:`opic-precision`.
 
 
