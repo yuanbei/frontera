@@ -30,6 +30,16 @@ class SchedulerDBInterface(object):
         pass
 
     @abstractmethod
+    def get_best_value(self, n_pages=1, delete=False):
+        """Get the pages with highest value
+
+        :param int n_pages: number of pages to retrieve
+        :param bool delete: if True remove the retrieves pages from the
+            database
+        """
+        pass
+
+    @abstractmethod
     def delete(self, page_id):
         pass
 
@@ -55,6 +65,9 @@ class SQLite(sqlite.Connection, SchedulerDBInterface):
                rate    REAL,
                value   REAL
             );
+
+            CREATE INDEX IF NOT EXISTS
+                value_index on scores(value);
             """
         )
 
@@ -91,6 +104,19 @@ class SQLite(sqlite.Connection, SchedulerDBInterface):
             """,
             (page_rate, page_value, page_id)
         )
+
+    def get_best_value(self, n_pages=1, delete=False):
+        pages = self._cursor.execute(
+            """
+            SELECT page_id FROM scores ORDER BY value DESC LIMIT ?
+            """,
+            (n_pages,)
+        ).fetchall()
+
+        if pages is None:
+            return []
+        else:
+            return [p[0] for p in pages]
 
     def delete(self, page_id):
         self._cursor.execute(

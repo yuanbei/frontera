@@ -272,7 +272,14 @@ settings:
       crawl-opic-DYYYY.MM.DD-THH.mm.SS
 
   Where YYYY is the current year, MM is the month, etc...
-    
+
+* BACKEND_OPIC_SCHEDULER
+
+  'optimal' will use 
+  :class:`Optimal <crawlfrontier.contrib.backends.opic.scheduler.Optimal>`.
+  Any other value, or if not set, will use 
+  :class:`BestFirst <crawlfrontier.contrib.backends.opic.scheduler.BestFirst>`.
+
 * BACKEND_TEST
 
   If True the backend will save some information to inspect after the 

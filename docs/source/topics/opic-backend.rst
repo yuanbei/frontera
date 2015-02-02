@@ -689,9 +689,11 @@ that all schedulers must satisfy:
 BestFirst
 ---------
 One possible strategy for an scheduler is just to be greedy: visit the
-next page in the frontier that gives the most value.
+next page in the frontier that gives the most value. This type of crawler
+is implemented in:
 
-TODO: implement and document
+.. autoclass:: crawlfrontier.contrib.backends.opic.scheduler.BestFirst
+   :members:
 
 .. _revisiting-scheduler:
 

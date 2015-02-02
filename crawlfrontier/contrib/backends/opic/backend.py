@@ -103,6 +103,9 @@ class OpicHitsBackend(Backend):
         self._test = test
         self._manager = manager
 
+        # Pages which has been requested but not yet crawled
+        self._pending_requests = set()
+
     # FrontierManager interface
     @classmethod
     def from_manager(cls, manager):
@@ -137,15 +140,22 @@ class OpicHitsBackend(Backend):
             else:
                 return db(os.path.join(workdir, name))
 
+        if manager.settings.get('BACKEND_OPIC_SCHEDULER', 'optimal'):
+            sched = scheduler.Optimal(
+                rate_value_db=in_workdir(
+                    schedulerdb.SQLite, 'scheduler.sqlite'),
+                freq_db=in_workdir(freqdb.SQLite, 'freqs.sqlite')
+            )
+        else:
+            sched = scheduler.BestFirst(
+                rate_value_db=in_workdir(
+                    schedulerdb.SQLite, 'scheduler.sqlite')
+            )
         return cls(manager,
                    db_graph=in_workdir(graphdb.SQLite, 'graph.sqlite'),
                    db_pages=in_workdir(pagedb.SQLite, 'pages.sqlite'),
                    db_hits=in_workdir(hitsdb.SQLite, 'hits.sqlite'),
-                   scheduler=scheduler.Optimal(
-                       rate_value_db=in_workdir(
-                           schedulerdb.SQLite, 'scheduler.sqlite'),
-                       freq_db=in_workdir(freqdb.SQLite, 'freqs.sqlite')
-                   ),
+                   scheduler=sched,
                    freq_estimator=freqest.Simple(
                        db=in_workdir(updatesdb.SQLite, 'updates.sqlite'),
                        default_freq=OpicHitsBackend.DEFAULT_FREQ),
@@ -253,6 +263,14 @@ class OpicHitsBackend(Backend):
 
         self._update_freqest(page_fingerprint, body=response.body)
 
+        # remove page from pending requests
+        try:
+            self._pending_requests.remove(
+                response.request.meta['fingerprint'])
+        except KeyError:
+            self._manager.logger.backend.debug(
+                '{0} was crawled without request'.format(response.url))
+
         toc = time.clock()
         self._manager.logger.backend.debug(
             'PROFILE PAGE_CRAWLED time: {0:.2f}'.format(toc - tic))
@@ -287,7 +305,9 @@ class OpicHitsBackend(Backend):
             self._update_page_value(page_id)
 
         # build requests for the best scores, which must be strictly positive
+        # TODO: filter out pending requests
         next_pages = self._scheduler.get_next_pages(max_n_requests)
+        self._pending_requests.update(next_pages)
         next_requests = map(self._get_request_from_id, next_pages)
 
         toc = time.clock()

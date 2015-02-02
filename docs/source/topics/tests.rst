@@ -91,7 +91,7 @@ Testing backend sequences
 =========================
 
 To test :class:`Backend <crawlfrontier.core.components.Backend>` crawling sequences you can use the
-:class:`BackendTest <crawlfrontier.tests.backends.BackendSequenceTest>` class.
+:class:`BackendSequenceTest <crawlfrontier.tests.backends.BackendSequenceTest>` class.
 
 .. autoclass:: crawlfrontier.tests.backends.BackendSequenceTest
 
@@ -99,7 +99,7 @@ To test :class:`Backend <crawlfrontier.core.components.Backend>` crawling sequen
     .. automethod:: crawlfrontier.tests.backends.BackendSequenceTest.assert_sequence
 
 
-:class:`BackendTest <crawlfrontier.tests.backends.BackendSequenceTest>` class will run a complete crawl of the passed
+:class:`BackendSequenceTest <crawlfrontier.tests.backends.BackendSequenceTest>` class will run a complete crawl of the passed
 site graphs and return the sequence used by the backend for visiting the different pages.
 
 Let's say you want to test to a backend that sort pages using alphabetic order.

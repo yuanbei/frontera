@@ -385,6 +385,16 @@ class Optimal(SchedulerInterface):
     """
 
     def __init__(self, n_clusters=100, rate_value_db=None, freq_db=None):
+        """
+        :param int n_clusters: number of clusters to use for the approximation
+        :param rate_value_db: database to store page_id, rate, value triplets
+        :param freq_db: database to store the scheduler solution
+
+        :type rate_value_db:
+           :class:`SchedulerDBInterface .schedulerdb.SchedulerDBInterface`
+        :type freq_db:
+           :class:`FreqDBInterface .freqdb.FreqDBInterface`
+        """
         super(Optimal, self).__init__()
 
         self._rv = rate_value_db or schedulerdb.SQLite()
@@ -444,7 +454,6 @@ class Optimal(SchedulerInterface):
             else:
                 # (rate_old, None) -> (rate_new, None)
                 self._rv.set(page_id, rate_new, None)
-
 
     def set_value(self, page_id, value_new):
         rate, value_old = self._rv.get(page_id)
@@ -511,3 +520,45 @@ class Optimal(SchedulerInterface):
     def close(self):
         self._rv.close()
         self._freqs.close()
+
+
+class BestFirst(SchedulerInterface):
+    def __init__(self, rate_value_db=None):
+        """A BestFirst crawler always return the next page with highest value.
+
+        To be really BestFirst get_next_pages should be called with n_pages=1.
+        However, the crawler runs OK if its asked for the next best n_pages.
+
+        :param rate_value_db: database to store page_id, rate, value triplets
+        :type rate_value_db:
+           :class:`SchedulerDBInterface .schedulerdb.SchedulerDBInterface`
+        """
+        super(BestFirst, self).__init__()
+        self._rv = rate_value_db or schedulerdb.SQLite()
+
+    def set_rate(self, page_id, rate_new):
+        pass
+
+    def set_value(self, page_id, value_new):
+        rate, value_old = self._rv.get(page_id)
+        if value_old is None:
+            self._rv.add(page_id, rate, value_new)
+        else:
+            self._rv.set(page_id, rate, value_new)
+
+    def delete(self, page_id):
+        self._rv.delete(page_id)
+
+    def get_next_pages(self, n_pages):
+        return self._rv.get_best_value(n_pages, delete=True)
+
+    def close(self):
+        self._rv.close()
+
+    @property
+    def crawl_rate(self):
+        pass
+
+    @crawl_rate.setter
+    def crawl_rate(self, value):
+        pass
