@@ -30,10 +30,11 @@ class SchedulerDBInterface(object):
         pass
 
     @abstractmethod
-    def get_best_value(self, n_pages=1, delete=False):
+    def get_best_value(self, n_pages=1, filter_out=None, delete=False):
         """Get the pages with highest value
 
         :param int n_pages: number of pages to retrieve
+        :param iterable filter_out: do not return pages inside this set
         :param bool delete: if True remove the retrieves pages from the
             database
         """
@@ -105,11 +106,16 @@ class SQLite(sqlite.Connection, SchedulerDBInterface):
             (page_rate, page_value, page_id)
         )
 
-    def get_best_value(self, n_pages=1, delete=False):
+    def get_best_value(self, n_pages=1, filter_out=None, delete=False):
+        if not filter_out:
+            filter_out = []
+
         pages = self._cursor.execute(
             """
-            SELECT page_id FROM scores ORDER BY value DESC LIMIT ?
-            """,
+            SELECT page_id FROM scores WHERE page_id NOT IN({0})
+            ORDER BY value DESC LIMIT ?
+            """.format(
+                ','.join(["'" + page_id + "'" for page_id in filter_out])),
             (n_pages,)
         ).fetchall()
 

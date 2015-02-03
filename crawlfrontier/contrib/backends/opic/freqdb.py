@@ -41,9 +41,11 @@ class FreqDBInterface(object):
         pass
 
     @abstractmethod
-    def get_next_pages(self, n=1):
-        """
-        Return the next pages, to maintain the desired frequency
+    def get_next_pages(self, n_pages=1, filter_out=None):
+        """Return the next pages, to maintain the desired frequency.
+
+        :param int n_pages: number of pages to retrieve
+        :param iterable filter_out: do not return pages inside this set
         """
         pass
 
@@ -128,12 +130,17 @@ class SQLite(sqlite.Connection, FreqDBInterface):
             (page_id,)
         )
 
-    def get_next_pages(self, n=1):
+    def get_next_pages(self, n_pages=1, filter_out=None):
+        if not filter_out:
+            filter_out = []
+
         pages = self._cursor.execute(
             """
-            SELECT page_id FROM page_frequency ORDER BY score ASC LIMIT ?
-            """,
-            (n,)
+            SELECT page_id FROM page_frequency WHERE page_id NOT IN({0})
+            ORDER BY score ASC LIMIT ?
+            """.format(
+                ','.join(["'" + page_id + "'" for page_id in filter_out])),
+            (n_pages,)
         ).fetchall()
 
         self._cursor.execute(

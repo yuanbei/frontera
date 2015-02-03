@@ -29,8 +29,12 @@ class SchedulerInterface(object):
         pass
 
     @abstractmethod
-    def get_next_pages(self, n_pages):
-        """Return next pages to crawl"""
+    def get_next_pages(self, n_pages, filter_out=None):
+        """Return next pages to crawl.
+
+        :param int n_pages: (maximum) number of pages to return
+        :param iterable filter_out: do not return pages in this set
+        """
         pass
 
     @abstractmethod
@@ -456,6 +460,7 @@ class Optimal(SchedulerInterface):
                 self._rv.set(page_id, rate_new, None)
 
     def set_value(self, page_id, value_new):
+        value_new = max(1e-12, value_new)
         rate, value_old = self._rv.get(page_id)
 
         changed = (value_new != value_old)
@@ -505,8 +510,8 @@ class Optimal(SchedulerInterface):
         else:
             return None
 
-    def get_next_pages(self, n_pages):
-        return self._freqs.get_next_pages(n_pages)
+    def get_next_pages(self, n_pages, filter_out=None):
+        return self._freqs.get_next_pages(n_pages, filter_out)
 
     def delete(self, page_id):
         rate, value = self._rv.get(page_id)
@@ -549,8 +554,12 @@ class BestFirst(SchedulerInterface):
     def delete(self, page_id):
         self._rv.delete(page_id)
 
-    def get_next_pages(self, n_pages):
-        return self._rv.get_best_value(n_pages, delete=True)
+    def get_next_pages(self, n_pages, filter_out=None):
+        return self._rv.get_best_value(
+            n_pages,
+            filter_out,
+            delete=True
+        )
 
     def close(self):
         self._rv.close()

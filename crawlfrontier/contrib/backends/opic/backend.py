@@ -140,17 +140,21 @@ class OpicHitsBackend(Backend):
             else:
                 return db(os.path.join(workdir, name))
 
-        if manager.settings.get('BACKEND_OPIC_SCHEDULER', 'optimal'):
+        if manager.settings.get(
+                'BACKEND_OPIC_SCHEDULER',
+                'optimal') == 'optimal':
             sched = scheduler.Optimal(
                 rate_value_db=in_workdir(
                     schedulerdb.SQLite, 'scheduler.sqlite'),
                 freq_db=in_workdir(freqdb.SQLite, 'freqs.sqlite')
             )
+            manager.logger.backend.debug('OPIC scheduler: Optimal')
         else:
             sched = scheduler.BestFirst(
                 rate_value_db=in_workdir(
                     schedulerdb.SQLite, 'scheduler.sqlite')
             )
+            manager.logger.backend.debug('OPIC scheduler: BestFirst')
         return cls(manager,
                    db_graph=in_workdir(graphdb.SQLite, 'graph.sqlite'),
                    db_pages=in_workdir(pagedb.SQLite, 'pages.sqlite'),
@@ -305,8 +309,10 @@ class OpicHitsBackend(Backend):
             self._update_page_value(page_id)
 
         # build requests for the best scores, which must be strictly positive
-        # TODO: filter out pending requests
-        next_pages = self._scheduler.get_next_pages(max_n_requests)
+        next_pages = self._scheduler.get_next_pages(
+            max_n_requests,
+            filter_out=self._pending_requests
+        )
         self._pending_requests.update(next_pages)
         next_requests = map(self._get_request_from_id, next_pages)
 
