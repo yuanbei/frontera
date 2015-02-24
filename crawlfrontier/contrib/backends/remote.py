@@ -17,14 +17,14 @@ class TestManager(object):
         def log(msg):
             print "Test Manager: ", msg
 
-        self.backend = TestManager.Nothing()
-        self.backend.logger = TestManager.Nothing()
+        self.logger = TestManager.Nothing()
+        self.logger.backend = TestManager.Nothing()
         for log_level in (
                 'info'
                 'debug',
                 'warning',
                 'error'):
-            setattr(self.backend.logger, log_level, log)
+            setattr(self.logger.backend, log_level, log)
         
 class KafkaBackend(Backend):
     DEFAULT_SERVER = "localhost:9092"
@@ -108,10 +108,10 @@ class KafkaBackend(Backend):
 
     def frontier_start(self):
         if self._connect_consumer():
-            self._manager.backend.logger.info(
-                "Successfully connected consumer to", self._topic_todo)
+            self._manager.logger.backend.info(
+                "Successfully connected consumer to " + self._topic_todo)
         else:
-            self._manager.backend.logger.info(
+            self._manager.logger.backend.warning(
                 "Could not connect consumer to {0}. I will try latter.".format(
                     self._topic_todo))
 
@@ -120,6 +120,7 @@ class KafkaBackend(Backend):
         self._prod.stop()
 
     def _send_message(self, obj, fail_wait_time=1.0, max_tries=5):
+        start = time.clock()
         success = False
         if self._connect_producer():
             msg = self._encoder.encode(obj)
@@ -138,47 +139,60 @@ class KafkaBackend(Backend):
 
                     time.sleep(fail_wait_time)
 
+        self._manager.logger.backend.debug("_send_message: {0}".format(time.clock() - start))
         return success
 
     def add_seeds(self, seeds):
         self._seeds += seeds
 
     def page_crawled(self, response, links):
-        self._send_message(
-            ScrapyJSONEncoder(
-                {'url': response['url'],
-                 'links': [link.url for link in links]}
-            )
-        )
+        self._send_message({
+            'url': response.url,
+            'links': [link.url for link in links]
+        })
             
     def request_error(self, page, error):
         pass
 
     def get_next_requests(self, max_n_requests):
+        start = time.clock()
         if self._seeds:
             n = min(len(self._seeds), max_n_requests)
-            urls, self._seeds = self._seeds[:n], self._seeds[n:]
+            requests, self._seeds = self._seeds[:n], self._seeds[n:]
         else:
             urls = []
-            self._connect_consumer()
+
+            if not self._connect_consumer():
+                return None
+            
             try:
+                success = False
                 for offmsg in self._cons.get_messages(
                         max_n_requests, 
                         timeout=self._wait_time):
+                    success = True
                     try:
                         obj = self._decoder.decode(offmsg.message.value)            
                         try:
                             urls.append(obj['url'])
                         except (KeyError, TypeError):
-                            self._manager.backend.logger.warning(
+                            self._manager.logger.backend.warning(
                                 "Could not get url field in message")
                     except ValueError:
-                        self._manager.backend.logger.warning(
+                        self._manager.logger.backend.warning(
                             "Could not decode {0} message: {1}".format(
                                 self._topic_todo,
                                 offmsg.message.value))
+                if not success:
+                    self._manager.logger.backend.warning(
+                        "Timeout ({0} seconds) while trying to get {1} requests".format(
+                            self._wait_time,
+                            max_n_requests)
+                    )
             except BrokerResponseError:
-                self._manager.backend.logger.warning(
-                    "Could not connect consumer to", self._topic_todo)
-
-        return map(Request, urls)
+                self._manager.logger.backend.warning(
+                    "Could not connect consumer to " + self._topic_todo)
+            
+            requests = map(Request, urls)
+        self._manager.logger.backend.debug("_get_next_requests: {0}".format(time.clock() - start))
+        return requests
