@@ -1,7 +1,10 @@
+"""This backend connects to an external crawl-frontier-server, 
+which sends pages to be fetched via Kafka"""
+
 import time
 
 from kafka import KafkaClient, SimpleConsumer, SimpleProducer
-from kafka.common import BrokerResponseError
+from kafka.common import BrokerResponseError, KafkaUnavailableError
 
 from scrapy.utils.serialize import ScrapyJSONEncoder, ScrapyJSONDecoder
 
@@ -10,6 +13,7 @@ from crawlfrontier.core.models import Request
 
 
 class TestManager(object):
+    """To be able to run the backend without a real manager behind"""
     class Nothing(object):
         pass
 
@@ -31,7 +35,8 @@ class KafkaBackend(Backend):
     DEFAULT_GROUP = "scrapy-crawler"
     DEFAULT_TOPIC_TODO = "frontier-todo"
     DEFAULT_TOPIC_DONE = "frontier-done"
-    DEFAULT_WAIT_TIME = 5.0
+    DEFAULT_WAIT_TIME = 1.0
+    DEFAULT_COMM_TRIES = 5
 
     def __init__(self, 
                  manager=None,
@@ -39,7 +44,8 @@ class KafkaBackend(Backend):
                  group=None, 
                  topic_todo=None, 
                  topic_done=None, 
-                 wait_time=None):
+                 wait_time=None,
+                 comm_tries=None):
 
         self._manager = manager or TestManager()
         self._seeds = []
@@ -50,9 +56,16 @@ class KafkaBackend(Backend):
         self._topic_done = topic_done or KafkaBackend.DEFAULT_TOPIC_DONE
         self._group = group or KafkaBackend.DEFAULT_GROUP
         self._wait_time = wait_time or KafkaBackend.DEFAULT_WAIT_TIME
+        self._comm_tries = comm_tries or KafkaBackend.DEFAULT_COMM_TRIES
 
         # Kafka setup
-        self._conn = KafkaClient(self._server)
+        try:
+            self._conn = KafkaClient(self._server)
+        except KafkaUnavailableError:
+            self._manager.logger.backend.error(
+                "Could not connect to Kafka server: " + self._server)
+            raise
+
         self._prod = None
         self._cons = None
 
@@ -119,13 +132,12 @@ class KafkaBackend(Backend):
         # flush everything if a batch is incomplete
         self._prod.stop()
 
-    def _send_message(self, obj, fail_wait_time=1.0, max_tries=5):
-        start = time.clock()
+    def _send_message(self, obj):
         success = False
         if self._connect_producer():
             msg = self._encoder.encode(obj)
             n_tries = 0
-            while not success and n_tries < max_tries:
+            while not success and n_tries < self._comm_tries:
                 try:
                     self._prod.send_messages(self._topic_done, msg)
                     success = True
@@ -134,12 +146,11 @@ class KafkaBackend(Backend):
                     if self._manager is not None:
                         self._manager.logger.backend.warning(
                             "Could not send message. Try {0}/{1}".format(
-                                n_tries, max_tries)
+                                n_tries, self._comm_tries)
                         )
 
-                    time.sleep(fail_wait_time)
+                    time.sleep(self._wait_time)
 
-        self._manager.logger.backend.debug("_send_message: {0}".format(time.clock() - start))
         return success
 
     def add_seeds(self, seeds):
@@ -155,18 +166,19 @@ class KafkaBackend(Backend):
         pass
 
     def get_next_requests(self, max_n_requests):
-        start = time.clock()
         if self._seeds:
             n = min(len(self._seeds), max_n_requests)
             requests, self._seeds = self._seeds[:n], self._seeds[n:]
         else:
-            urls = []
-
             if not self._connect_consumer():
-                return None
-            
-            try:
-                success = False
+                self._manager.logger.backend.warning(
+                    "Could not connect consumer to " + self._topic_todo)
+                return []
+
+            urls = []           
+            fails = 0
+            success = False
+            while not success and fails < self._comm_tries:
                 for offmsg in self._cons.get_messages(
                         max_n_requests, 
                         timeout=self._wait_time):
@@ -184,15 +196,16 @@ class KafkaBackend(Backend):
                                 self._topic_todo,
                                 offmsg.message.value))
                 if not success:
+                    fails += 1
                     self._manager.logger.backend.warning(
-                        "Timeout ({0} seconds) while trying to get {1} requests".format(
+                        "Timeout ({0} seconds) while trying to get {1} requests ({2}/{3} tries)".format(
                             self._wait_time,
-                            max_n_requests)
+                            max_n_requests,
+                            fails,
+                            self._comm_tries
+                        )
                     )
-            except BrokerResponseError:
-                self._manager.logger.backend.warning(
-                    "Could not connect consumer to " + self._topic_todo)
-            
+
             requests = map(Request, urls)
-        self._manager.logger.backend.debug("_get_next_requests: {0}".format(time.clock() - start))
+
         return requests

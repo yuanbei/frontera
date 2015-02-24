@@ -45,3 +45,8 @@ SEEDS_SOURCE = 'seeds.txt'
 # Testing
 #--------------------------------------------------------------------------
 #CLOSESPIDER_PAGECOUNT = 1
+
+
+#ITEM_PIPELINES = {
+#    'scrapy_frontier.pipelines.TestExportPipeline': 300,
+#}

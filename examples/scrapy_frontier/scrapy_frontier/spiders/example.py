@@ -3,6 +3,8 @@ from scrapy.contrib.linkextractors.sgml import SgmlLinkExtractor
 from scrapy.contrib.linkextractors.regex import RegexLinkExtractor
 from scrapy.contrib.spiders import CrawlSpider, Rule
 
+from scrapy_frontier.items import ExampleItem
+
 
 class FallbackLinkExtractor(object):
     def __init__(self, extractors):
@@ -24,6 +26,11 @@ class MySpider(CrawlSpider):
     ]), callback='parse_page', follow=True)]
 
     def parse_page(self, response):
-        pass
+        item = ExampleItem(
+            url=response.url,
+            http_status=response.status
+        )
+
+        return item
 
     parse_start_url = parse_page
