@@ -126,7 +126,7 @@ class RootResource(JsonResource):
 class JsonRpcService(server.Site):
     def __init__(self, worker, settings):
         logfile = settings.get('JSONRPC_LOGFILE')
-        self.portrange = settings.get('JSONRPC_PORT', 6023)
+        self.portrange = settings.get('JSONRPC_PORT', [6023, 6073])
         self.host = settings.get('JSONRPC_HOST', '127.0.0.1')
 
         root = RootResource()
