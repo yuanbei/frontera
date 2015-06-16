@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from twisted.web import server, resource
-from twisted.internet import reactor
+from utils import listen_tcp
 
 from logging import getLogger
 from json import JSONDecoder, JSONEncoder
@@ -137,7 +137,7 @@ class JsonRpcService(server.Site):
         self.noisy = False
 
     def start_listening(self):
-        self.port = reactor.listenTCP(self.portrange, self, interface=self.host)
+        self.port = listen_tcp(self.portrange, self.host, self)
         h = self.port.getHost()
         logger.info('Web service listening on %(host)s:%(port)d'.format(host=h.host, port=h.port))
 
