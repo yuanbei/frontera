@@ -45,6 +45,9 @@ class Encoder(object):
     def encode_update_score(self, fingerprint, score, url, schedule):
         return packb(['us', fingerprint, score, url, schedule])
 
+    def encode_new_job_id(self, job_id):
+        return packb(['njid', int(job_id)])
+
 
 class Decoder(object):
     def __init__(self, request_model, response_model, *a, **kw):
@@ -75,6 +78,8 @@ class Decoder(object):
             return ('request_error', self._request_from_object(obj[1]), obj[2])
         if obj[0] == 'as':
             return ('add_seeds', map(self._request_from_object, obj[1]))
+        if obj[0] == 'njid':
+            return ('new_job_id', int(obj[1]))
         return TypeError('Unknown message type')
 
     def decode_request(self, buffer):

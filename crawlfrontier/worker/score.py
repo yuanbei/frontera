@@ -40,6 +40,7 @@ class ScoringWorker(object):
         self.backend = self._manager.backend
         self.stats = {}
         self.cache_flush_counter = 0
+        self.job_id = 0
 
 
     def work(self):
@@ -96,11 +97,15 @@ class ScoringWorker(object):
 
             if type == 'page_crawled':
                 _, response, links = msg
+                if response.meta['jid'] != self.job_id:
+                    continue
                 results.extend(self.on_page_crawled(response, links))
                 continue
 
             if type == 'request_error':
                 _, request, error = msg
+                if request.meta['jid'] != self.job_id:
+                    continue
                 results.extend(self.on_request_error(request, error))
                 continue
         if len(results):
