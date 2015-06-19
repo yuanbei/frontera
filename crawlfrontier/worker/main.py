@@ -14,7 +14,7 @@ from crawlfrontier.settings import Settings
 from crawlfrontier.worker.partitioner import Crc32NamePartitioner
 from crawlfrontier.utils.url import parse_domain_from_url_fast
 from utils import CallLaterOnce
-from server import JsonRpcService
+from server import WorkerJsonRpcService
 from offsets import Fetcher
 
 
@@ -234,7 +234,7 @@ if __name__ == '__main__':
         settings.set("JSONRPC_PORT", args.port)
 
     worker = FrontierWorker(settings, args.no_batches, args.no_scoring, args.no_incoming)
-    server = JsonRpcService(worker, settings)
+    server = WorkerJsonRpcService(worker, settings)
     server.start_listening()
     worker.run()
 
