@@ -239,10 +239,10 @@ class HBaseState(object):
         map(get, objs)
 
     def flush(self, force_clear):
-        if len(self._state_cache) > 1000000:
+        if len(self._state_cache) > 3000000:
             force_clear = True
         table = self.connection.table(self._table_name)
-        for chunk in chunks(self._state_cache.items(), 49152):
+        for chunk in chunks(self._state_cache.items(), 32768):
             with table.batch(transaction=True) as b:
                 for fprint, state in chunk:
                     hb_obj = prepare_hbase_object(state=state)
@@ -254,7 +254,8 @@ class HBaseState(object):
     def fetch(self, fingerprints):
         to_fetch = [f for f in fingerprints if f not in self._state_cache]
         print "to fetch %d from %d" % (len(to_fetch), len(fingerprints))
-        for chunk in chunks(to_fetch, 131072):
+        print "cache size %s" % len(self._state_cache)
+        for chunk in chunks(to_fetch, 65536):
             keys = [unhexlify(fprint) for fprint in chunk]
             table = self.connection.table(self._table_name)
             records = table.rows(keys, columns=['s:state'])
@@ -297,7 +298,7 @@ class HBaseBackend(Backend):
                                                             'bloom_filter_type': 'ROW', 'in_memory': True, }
                                                             })
         table = self.connection.table(self._table_name)
-        self.batch = table.batch(batch_size=12288)
+        self.batch = table.batch(batch_size=9216)
 
     @classmethod
     def from_manager(cls, manager):
