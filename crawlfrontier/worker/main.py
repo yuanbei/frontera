@@ -14,7 +14,7 @@ from crawlfrontier.settings import Settings
 from crawlfrontier.worker.partitioner import Crc32NamePartitioner
 from crawlfrontier.utils.url import parse_domain_from_url_fast
 from utils import CallLaterOnce
-from server import JsonRpcService
+from server import WorkerJsonRpcService
 from offsets import Fetcher
 
 
@@ -89,6 +89,7 @@ class FrontierWorker(object):
         self.max_next_requests = settings.MAX_NEXT_REQUESTS
         self.slot = Slot(self.new_batch, self.consume_incoming, self.consume_scoring, no_batches, no_scoring,
                          settings.get('NEW_BATCH_DELAY', 60.0), no_incoming)
+        self.job_id = 0
         self.stats = {}
 
     def run(self):
@@ -116,6 +117,8 @@ class FrontierWorker(object):
                     if type == 'page_crawled':
                         _, response, links = msg
                         logger.debug("Page crawled %s", response.url)
+                        if response.meta['jid'] != self.job_id:
+                            continue
 
                         # FIXME: a dirty hack
                         filtered = []
@@ -127,6 +130,8 @@ class FrontierWorker(object):
                         self._backend.page_crawled(response, filtered)
                     if type == 'request_error':
                         _, request, error = msg
+                        if request.meta['jid'] != self.job_id:
+                            continue
                         logger.info("Request error %s", request.url)
                         self._backend.request_error(request, error)
                 finally:
@@ -153,8 +158,11 @@ class FrontierWorker(object):
                     logger.error("Decoding error: %s", e)
                     continue
                 else:
-                    _, fprint, score, url, schedule = msg
-                    batch[fprint] = (score, url, schedule)
+                    if msg[0] == 'update_score':
+                        _, fprint, score, url, schedule = msg
+                        batch[fprint] = (score, url, schedule)
+                    if msg[0] == 'new_job_id':
+                        self.job_id = msg[1]
                 finally:
                     consumed += 1
             self._backend.update_score(batch)
@@ -184,6 +192,7 @@ class FrontierWorker(object):
         count = 0
         for request in self._backend.get_next_requests(self.max_next_requests, partitions=partitions):
             try:
+                request.meta['jid'] = self.job_id
                 eo = self._encoder.encode_request(request)
             except Exception, e:
                 logger.error("Encoding error, %s, fingerprint: %s, url: %s" % (e,
@@ -234,7 +243,7 @@ if __name__ == '__main__':
         settings.set("JSONRPC_PORT", args.port)
 
     worker = FrontierWorker(settings, args.no_batches, args.no_scoring, args.no_incoming)
-    server = JsonRpcService(worker, settings)
+    server = WorkerJsonRpcService(worker, settings)
     server.start_listening()
     worker.run()
 

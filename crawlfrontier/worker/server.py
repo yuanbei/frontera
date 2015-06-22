@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from twisted.web import server, resource
-from twisted.internet import reactor
+from utils import listen_tcp
 
 from logging import getLogger
 from json import JSONDecoder, JSONEncoder
@@ -95,21 +95,24 @@ class JsonRpcResource(JsonResource):
         method = jrequest['method']
         try:
             try:
-                if method == 'disable_new_batches':
-                    self.worker.disable_new_batches()
-                    return jsonrpc_result(jrequest['id'], "success")
-
-                if method == 'enable_new_batches':
-                    self.worker.enable_new_batches()
-                    return jsonrpc_result(jrequest['id'], "success")
+                self.process_request(method, jrequest)
             except Exception, err:
                 if isinstance(err, JsonRpcError):
                     raise err
                 trace_lines = format_exception(*exc_info())
                 raise JsonRpcError(500, "Error adding seeds: %s" % (str("").join(trace_lines)))
-            raise JsonRpcError(400, "Unknown method")
         except JsonRpcError, err:
             return err(jrequest['id'])
+
+    def process_request(self, method, jrequest):
+        if method == 'disable_new_batches':
+            self.worker.disable_new_batches()
+            return jsonrpc_result(jrequest['id'], "success")
+
+        if method == 'enable_new_batches':
+            self.worker.enable_new_batches()
+            return jsonrpc_result(jrequest['id'], "success")
+        raise JsonRpcError(400, "Unknown method")
 
 
 class RootResource(JsonResource):
@@ -124,22 +127,26 @@ class RootResource(JsonResource):
 
 
 class JsonRpcService(server.Site):
-    def __init__(self, worker, settings):
+    def __init__(self, root, settings):
         logfile = settings.get('JSONRPC_LOGFILE')
-        self.portrange = settings.get('JSONRPC_PORT', 6023)
+        self.portrange = settings.get('JSONRPC_PORT', [6023, 6073])
         self.host = settings.get('JSONRPC_HOST', '127.0.0.1')
-
-        root = RootResource()
-        root.putChild('status', StatusResource(worker))
-        root.putChild('jsonrpc', JsonRpcResource(worker))
 
         server.Site.__init__(self, root, logPath=logfile)
         self.noisy = False
 
     def start_listening(self):
-        self.port = reactor.listenTCP(self.portrange, self, interface=self.host)
+        self.port = listen_tcp(self.portrange, self.host, self)
         h = self.port.getHost()
         logger.info('Web service listening on %(host)s:%(port)d'.format(host=h.host, port=h.port))
 
     def stop_listening(self):
         self.port.stopListening()
+
+
+class WorkerJsonRpcService(JsonRpcService):
+    def __init__(self, worker, settings):
+        root = RootResource()
+        root.putChild('status', StatusResource(worker))
+        root.putChild('jsonrpc', JsonRpcResource(worker))
+        JsonRpcService.__init__(self, root, settings)

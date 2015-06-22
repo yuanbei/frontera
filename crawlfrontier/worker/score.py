@@ -39,88 +39,98 @@ class ScoringWorker(object):
         self.strategy = strategy_module.CrawlStrategy()
         self.backend = self._manager.backend
         self.stats = {}
+        self.cache_flush_counter = 0
+        self.job_id = 0
+
+
+    def work(self):
+        consumed = 0
+        batch = []
+        fingerprints = set()
+        try:
+            for m in self._in_consumer.get_messages(count=self.consumer_batch_size, block=True, timeout=1.0):
+                try:
+                    msg = self._decoder.decode(m.message.value)
+                except (KeyError, TypeError), e:
+                    logger.error("Decoding error: %s", e)
+                    continue
+                else:
+                    type = msg[0]
+                    batch.append(msg)
+                    if type == 'add_seeds':
+                        _, seeds = msg
+                        fingerprints.update(map(lambda x: x.meta['fingerprint'], seeds))
+                        continue
+
+                    if type == 'page_crawled':
+                        _, response, links = msg
+                        fingerprints.add(response.meta['fingerprint'])
+                        fingerprints.update(map(lambda x: x.meta['fingerprint'], links))
+                        continue
+
+                    if type == 'request_error':
+                        _, request, error = msg
+                        fingerprints.add(request.meta['fingerprint'])
+                        continue
+
+                    raise TypeError('Unknown message type %s' % type)
+                finally:
+                    consumed += 1
+        except OffsetOutOfRangeError, e:
+            # https://github.com/mumrah/kafka-python/issues/263
+            self._in_consumer.seek(0, 2)  # moving to the tail of the log
+            logger.info("Caught OffsetOutOfRangeError, moving to the tail of the log.")
+
+        self.backend.fetch_states(list(fingerprints))
+        fingerprints.clear()
+        results = []
+        for msg in batch:
+            if len(results) > 1024:
+                self._producer.send_messages(self.outgoing_topic, *results)
+                results = []
+
+            type = msg[0]
+            if type == 'add_seeds':
+                _, seeds = msg
+                results.extend(self.on_add_seeds(seeds))
+                continue
+
+            if type == 'page_crawled':
+                _, response, links = msg
+                if response.meta['jid'] != self.job_id:
+                    continue
+                results.extend(self.on_page_crawled(response, links))
+                continue
+
+            if type == 'request_error':
+                _, request, error = msg
+                if request.meta['jid'] != self.job_id:
+                    continue
+                results.extend(self.on_request_error(request, error))
+                continue
+        if len(results):
+            self._producer.send_messages(self.outgoing_topic, *results)
+
+        if self.cache_flush_counter == 30:
+            logger.info("Flushing states")
+            self.backend.flush_states(is_clear=False)
+            logger.info("Flushing states finished")
+            self.cache_flush_counter = 0
+
+        self.cache_flush_counter += 1
+
+        if self.strategy.finished():
+            logger.info("Succesfully reached the crawling goal. Exiting.")
+            exit(0)
+
+        logger.info("Consumed %d items.", consumed)
+        self.stats['last_consumed'] = consumed
+        self.stats['last_consumption_run'] = asctime()
 
     def run(self):
-        cache_flush_counter = 0
         while True:
-            consumed = 0
-            batch = []
-            fingerprints = set()
-            try:
-                for m in self._in_consumer.get_messages(count=self.consumer_batch_size, block=True, timeout=1.0):
-                    try:
-                        msg = self._decoder.decode(m.message.value)
-                    except (KeyError, TypeError), e:
-                        logger.error("Decoding error: %s", e)
-                        continue
-                    else:
-                        type = msg[0]
-                        batch.append(msg)
-                        if type == 'add_seeds':
-                            _, seeds = msg
-                            fingerprints.update(map(lambda x: x.meta['fingerprint'], seeds))
-                            continue
+            self.work()
 
-                        if type == 'page_crawled':
-                            _, response, links = msg
-                            fingerprints.add(response.meta['fingerprint'])
-                            fingerprints.update(map(lambda x: x.meta['fingerprint'], links))
-                            continue
-
-                        if type == 'request_error':
-                            _, request, error = msg
-                            fingerprints.add(request.meta['fingerprint'])
-                            continue
-
-                        raise TypeError('Unknown message type %s' % type)
-                    finally:
-                        consumed += 1
-            except OffsetOutOfRangeError, e:
-                # https://github.com/mumrah/kafka-python/issues/263
-                self._in_consumer.seek(0, 2)  # moving to the tail of the log
-                logger.info("Caught OffsetOutOfRangeError, moving to the tail of the log.")
-
-            self.backend.fetch_states(list(fingerprints))
-            fingerprints.clear()
-            results = []
-            for msg in batch:
-                if len(results) > 1024:
-                    self._producer.send_messages(self.outgoing_topic, *results)
-                    results = []
-
-                type = msg[0]
-                if type == 'add_seeds':
-                    _, seeds = msg
-                    results.extend(self.on_add_seeds(seeds))
-                    continue
-
-                if type == 'page_crawled':
-                    _, response, links = msg
-                    results.extend(self.on_page_crawled(response, links))
-                    continue
-
-                if type == 'request_error':
-                    _, request, error = msg
-                    results.extend(self.on_request_error(request, error))
-                    continue
-            if len(results):
-                self._producer.send_messages(self.outgoing_topic, *results)
-
-            if cache_flush_counter == 30:
-                logger.info("Flushing states")
-                self.backend.flush_states(is_clear=False)
-                logger.info("Flushing states finished")
-                cache_flush_counter = 0
-
-            cache_flush_counter += 1
-
-            if self.strategy.finished():
-                logger.info("Succesfully reached the crawling goal. Exiting.")
-                exit(0)
-
-            logger.info("Consumed %d items.", consumed)
-            self.stats['last_consumed'] = consumed
-            self.stats['last_consumption_run'] = asctime()
 
     def on_add_seeds(self, seeds):
         logger.info('Adding %i seeds', len(seeds))
