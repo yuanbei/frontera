@@ -240,7 +240,7 @@ if __name__ == '__main__':
     logger.setLevel(args.log_level)
     settings = Settings(module=args.config)
     if args.port:
-        settings.set("JSONRPC_PORT", args.port)
+        settings.set("JSONRPC_PORT", [args.port])
 
     worker = FrontierWorker(settings, args.no_batches, args.no_scoring, args.no_incoming)
     server = WorkerJsonRpcService(worker, settings)
