@@ -91,6 +91,9 @@ class FrontierWorker(object):
         self.job_id = 0
         self.stats = {}
 
+    def set_process_info(self, process_info):
+        self.process_info = process_info
+
     def run(self):
         self.slot.schedule(on_start=True)
         reactor.run()
