@@ -44,7 +44,6 @@ class Slot(object):
 
     def error(self, f):
         logger.error(f)
-        reactor.stop()
         return f
 
     def schedule(self, on_start=False):
