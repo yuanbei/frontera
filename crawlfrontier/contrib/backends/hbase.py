@@ -161,7 +161,7 @@ class HBaseQueue(object):
             self.logger.debug("Try %d, limit %d, last attempt: requests %d, hosts %d" % (tries, limit, count, len(queue.keys())))
             meta_map.clear()
             queue.clear()
-            for rk, data in table.scan(row_prefix='%d_' % partition_id, limit=int(limit)):
+            for rk, data in table.scan(row_prefix='%d_' % partition_id, limit=int(limit), batch_size=256):
                 for cq, buf in data.iteritems():
                     stream = BytesIO(buf)
                     unpacker = Unpacker(stream)
