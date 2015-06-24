@@ -95,7 +95,7 @@ class JsonRpcResource(JsonResource):
         method = jrequest['method']
         try:
             try:
-                self.process_request(method, jrequest)
+                return self.process_request(method, jrequest)
             except Exception, err:
                 if isinstance(err, JsonRpcError):
                     raise err
