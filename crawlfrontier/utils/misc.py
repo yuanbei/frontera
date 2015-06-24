@@ -1,4 +1,6 @@
 from importlib import import_module
+from random import randint
+from sys import maxint
 
 
 def load_object(path):
@@ -30,3 +32,7 @@ def load_object(path):
 def chunks(l, n):
     for i in xrange(0, len(l), n):
         yield l[i:i+n]
+
+
+def generate_job_id():
+    return randint(1, maxint)

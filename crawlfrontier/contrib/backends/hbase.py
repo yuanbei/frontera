@@ -83,6 +83,7 @@ class HBaseQueue(object):
 
         if self.table_name not in tables:
             self.connection.create_table(self.table_name, {'f': {'max_versions': 1, 'block_cache_enabled': 1}})
+        self.job_id = None
 
     def schedule(self, links):
         """
@@ -115,6 +116,9 @@ class HBaseQueue(object):
                 i = i-1  # last interval is inclusive from right
             return (i * resolution, (i+1) * resolution)
 
+        if self.job_id == None:
+            raise KeyError("Can't schedule without job id being set.")
+
         timestamp = int(time() * 1E+6)
         data = dict()
         for score, fingerprint, domain, url in links:
@@ -128,7 +132,7 @@ class HBaseQueue(object):
                 raise TypeError("domain of unknown type.")
             item = [unhexlify(fingerprint), host_crc32, url, score]
             score = 1 - score  # because of lexicographical sort in HBase
-            rk = "%d_%s_%d" %(partition_id, "%0.2f_%0.2f" % get_interval(score, 0.01), timestamp)
+            rk = "%d_%d_%s_%d" %(self.job_id, partition_id, "%0.2f_%0.2f" % get_interval(score, 0.01), timestamp)
             data.setdefault(rk, []).append((score, item))
 
         table = self.connection.table(self.table_name)
@@ -148,6 +152,9 @@ class HBaseQueue(object):
                 b.put(rk, final)
 
     def get(self, partition_id, min_requests, min_hosts=None, max_requests_per_host=None):
+        if self.job_id == None:
+            raise KeyError("Can't get from queue without job id being set.")
+
         table = self.connection.table(self.table_name)
 
         meta_map = {}
@@ -161,7 +168,8 @@ class HBaseQueue(object):
             self.logger.debug("Try %d, limit %d, last attempt: requests %d, hosts %d" % (tries, limit, count, len(queue.keys())))
             meta_map.clear()
             queue.clear()
-            for rk, data in table.scan(row_prefix='%d_' % partition_id, limit=int(limit), batch_size=256):
+            for rk, data in table.scan(row_prefix='%d_%d_' % (self.job_id, partition_id), limit=int(limit),
+                                       batch_size=256):
                 for cq, buf in data.iteritems():
                     stream = BytesIO(buf)
                     unpacker = Unpacker(stream)
@@ -216,6 +224,9 @@ class HBaseQueue(object):
     def rebuild(self, table_name):
         pass
 
+    def set_job_id(self, job_id):
+        self.job_id = pack(">I", job_id)
+
 
 class HBaseState(object):
 
@@ -223,6 +234,7 @@ class HBaseState(object):
         self.connection = connection
         self._table_name = table_name
         self._state_cache = {}
+        self.job_id = None
 
     def update(self, objs, persist):
         objs = objs if type(objs) in [list, tuple] else [objs]
@@ -239,6 +251,8 @@ class HBaseState(object):
         map(get, objs)
 
     def flush(self, force_clear):
+        if self.job_id == None:
+            raise KeyError("Can't flush without job id being set.")
         if len(self._state_cache) > 3000000:
             force_clear = True
         table = self.connection.table(self._table_name)
@@ -246,23 +260,29 @@ class HBaseState(object):
             with table.batch(transaction=True) as b:
                 for fprint, state in chunk:
                     hb_obj = prepare_hbase_object(state=state)
-                    b.put(unhexlify(fprint), hb_obj)
+                    b.put(self.job_id+unhexlify(fprint), hb_obj)
         if force_clear:
             print "Cache has %d items, clearing" % len(self._state_cache)
             self._state_cache.clear()
 
     def fetch(self, fingerprints):
+        if self.job_id == None:
+            raise KeyError("Can't fetch states without job id being set.")
         to_fetch = [f for f in fingerprints if f not in self._state_cache]
         print "to fetch %d from %d" % (len(to_fetch), len(fingerprints))
         print "cache size %s" % len(self._state_cache)
         for chunk in chunks(to_fetch, 65536):
-            keys = [unhexlify(fprint) for fprint in chunk]
+            keys = [self.job_id+unhexlify(fprint) for fprint in chunk]
             table = self.connection.table(self._table_name)
             records = table.rows(keys, columns=['s:state'])
             for key, cells in records:
                 if 's:state' in cells:
                     state = unpack('>B', cells['s:state'])[0]
-                    self._state_cache[hexlify(key)] = state
+                    _, fprint = unpack(">I20s", key)
+                    self._state_cache[hexlify(fprint)] = state
+
+    def set_job_id(self, job_id):
+        self.job_id = pack(">I", job_id)
 
 
 class HBaseBackend(Backend):
@@ -285,7 +305,7 @@ class HBaseBackend(Backend):
         self.queue = HBaseQueue(self.connection, self.queue_partitions, self.manager.logger.backend,
                                 drop=drop_all_tables)
         self.state_checker = HBaseState(self.connection, self._table_name)
-
+        self.job_id = None
 
         tables = set(self.connection.tables())
         if drop_all_tables and self._table_name in tables:
@@ -305,7 +325,8 @@ class HBaseBackend(Backend):
         return cls(manager)
 
     def frontier_start(self):
-        pass
+        if self.job_id == None:
+            raise KeyError("Job id isn't set, can't start frontier.")
 
     def frontier_stop(self):
         self.connection.close()
@@ -318,7 +339,7 @@ class HBaseBackend(Backend):
                                        depth=0,
                                        created_at=utcnow_timestamp(),
                                        domain_fingerprint=domain['fingerprint'])
-            self.batch.put(unhexlify(fingerprint), obj)
+            self.batch.put(self.job_id+unhexlify(fingerprint), obj)
 
     def page_crawled(self, response, links):
         url, fingerprint, domain = self.manager.canonicalsolver.get_canonical_url(response)
@@ -327,15 +348,15 @@ class HBaseBackend(Backend):
         links_dict = dict()
         for link in links:
             link_url, link_fingerprint, link_domain = self.manager.canonicalsolver.get_canonical_url(link)
-            links_dict[unhexlify(link_fingerprint)] = (link, link_url, link_domain)
+            links_dict[self.job_id+unhexlify(link_fingerprint)] = (link, link_url, link_domain)
 
 
-        self.batch.put(unhexlify(fingerprint), obj)
-        for link_fingerprint, (link, link_url, link_domain) in links_dict.iteritems():
+        self.batch.put(self.job_id+unhexlify(fingerprint), obj)
+        for rk, (_, link_url, link_domain) in links_dict.iteritems():
             obj = prepare_hbase_object(url=link_url,
                                        created_at=utcnow_timestamp(),
                                        domain_fingerprint=link_domain['fingerprint'])
-            self.batch.put(link_fingerprint, obj)
+            self.batch.put(rk, obj)
 
     def request_error(self, request, error):
         url, fingerprint, domain = self.manager.canonicalsolver.get_canonical_url(request)
@@ -343,7 +364,7 @@ class HBaseBackend(Backend):
                                    created_at=utcnow_timestamp(),
                                    error=error,
                                    domain_fingerprint=domain['fingerprint'])
-        rk = unhexlify(request.meta['fingerprint'])
+        rk = self.job_id+unhexlify(request.meta['fingerprint'])
         self.batch.put(rk, obj)
 
     def get_next_requests(self, max_next_requests, **kwargs):
@@ -372,7 +393,7 @@ class HBaseBackend(Backend):
         to_schedule = []
         for fprint, (score, url, schedule) in batch.iteritems():
             obj = prepare_hbase_object(score=score)
-            rk = unhexlify(fprint)
+            rk = self.job_id+unhexlify(fprint)
             self.batch.put(rk, obj)
             if schedule:
                 _, hostname, _, _, _, _ = parse_domain_from_url_fast(url)
@@ -393,4 +414,10 @@ class HBaseBackend(Backend):
 
     def fetch_states(self, fingerprints):
         self.state_checker.fetch(fingerprints)
+
+    def set_job_id(self, job_id):
+        self.job_id = int(job_id)
+        self.state_checker.set_job_id(self.job_id)
+        self.queue.set_job_id(self.job_id)
+
 
