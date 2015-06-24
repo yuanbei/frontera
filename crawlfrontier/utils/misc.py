@@ -1,6 +1,5 @@
 from importlib import import_module
 from random import randint
-from sys import maxint
 
 
 def load_object(path):
