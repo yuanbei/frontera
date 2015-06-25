@@ -35,4 +35,4 @@ def chunks(l, n):
 
 
 def generate_job_id():
-    return randint(1, maxint)
+    return randint(1, 2**32-1) # 32-bit unsigned
