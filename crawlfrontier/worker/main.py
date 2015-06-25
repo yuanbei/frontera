@@ -78,6 +78,7 @@ class FrontierWorker(object):
 
         self._offset_fetcher = Fetcher(self._kafka, settings.get('OUTGOING_TOPIC'), settings.get('FRONTIER_GROUP'))
 
+        settings.set("AUTO_START", False)
         self._manager = FrontierManager.from_settings(settings)
         self._backend = self._manager.backend
         self._encoder = Encoder(self._manager.request_model)
@@ -89,6 +90,8 @@ class FrontierWorker(object):
         self.slot = Slot(self.new_batch, self.consume_incoming, self.consume_scoring, no_batches, no_scoring,
                          settings.get('NEW_BATCH_DELAY', 60.0), no_incoming)
         self.job_id = 0
+        self._backend.set_job_id(self.job_id)
+        self._manager.start()
         self.stats = {}
 
     def set_process_info(self, process_info):

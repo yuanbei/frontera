@@ -30,6 +30,7 @@ class ScoringWorker(object):
                                        max_buffer_size=10485760,
                                        partitions=[partition_id])
 
+        settings.set("AUTO_START", False)
         self._manager = FrontierManager.from_settings(settings)
         self._decoder = Decoder(self._manager.request_model, self._manager.response_model)
         self._encoder = Encoder(self._manager.request_model)
@@ -40,8 +41,10 @@ class ScoringWorker(object):
         self.backend = self._manager.backend
         self.stats = {}
         self.cache_flush_counter = 0
-        self.job_id = 0
 
+        self.job_id = 0
+        self.backend.set_job_id(self.job_id)
+        self._manager.start()
 
     def work(self):
         consumed = 0

@@ -225,7 +225,7 @@ class HBaseQueue(object):
         pass
 
     def set_job_id(self, job_id):
-        self.job_id = pack(">I", job_id)
+        self.job_id = job_id
 
 
 class HBaseState(object):
@@ -416,8 +416,8 @@ class HBaseBackend(Backend):
         self.state_checker.fetch(fingerprints)
 
     def set_job_id(self, job_id):
-        self.job_id = int(job_id)
-        self.state_checker.set_job_id(self.job_id)
-        self.queue.set_job_id(self.job_id)
+        self.job_id = pack(">I", job_id)
+        self.state_checker.set_job_id(job_id)
+        self.queue.set_job_id(job_id)
 
 
