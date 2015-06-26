@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from inspect import isclass
 
 from crawlfrontier.exceptions import NotConfigured
 from crawlfrontier.utils.misc import load_object
@@ -129,8 +130,13 @@ class BaseManager(object):
                                settings=manager_settings)
 
     def _load_object(self, obj_class_name, silent=False):
-        obj_class = load_object(obj_class_name)
         try:
+            if type(obj_class_name) in [str, unicode]:
+                obj_class = load_object(obj_class_name)
+            elif isclass(obj_class_name):
+                obj_class = obj_class_name
+            else:
+                raise NotConfigured
             return self._load_frontier_object(obj_class)
         except NotConfigured:
             if not silent:
