@@ -86,8 +86,7 @@ class JsonRpcResource(JsonResource):
 
     ws_name = 'jsonrpc'
 
-    def __init__(self, worker):
-        self.worker = worker
+    def __init__(self):
         JsonResource.__init__(self)
 
     def render_POST(self, txrequest):
@@ -100,9 +99,16 @@ class JsonRpcResource(JsonResource):
                 if isinstance(err, JsonRpcError):
                     raise err
                 trace_lines = format_exception(*exc_info())
-                raise JsonRpcError(500, "Error adding seeds: %s" % (str("").join(trace_lines)))
+                raise JsonRpcError(500, "Error processing request: %s" % (str("").join(trace_lines)))
         except JsonRpcError, err:
             return err(jrequest['id'])
+
+
+class WorkerJsonRpcResource(JsonRpcResource):
+
+    def __init__(self, worker):
+        self.worker = worker
+        JsonRpcResource.__init__(self)
 
     def process_request(self, method, jrequest):
         if method == 'disable_new_batches':
@@ -148,7 +154,7 @@ class WorkerJsonRpcService(JsonRpcService):
     def __init__(self, worker, settings):
         root = RootResource()
         root.putChild('status', StatusResource(worker))
-        root.putChild('jsonrpc', JsonRpcResource(worker))
+        root.putChild('jsonrpc', WorkerJsonRpcResource(worker))
         JsonRpcService.__init__(self, root, settings)
         self.worker = worker
 
