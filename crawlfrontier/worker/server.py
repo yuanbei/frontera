@@ -6,6 +6,7 @@ from logging import getLogger
 from json import JSONDecoder, JSONEncoder
 from sys import exc_info
 from traceback import format_exception
+from socket import getfqdn
 
 logger = getLogger("cf-server")
 
@@ -161,4 +162,4 @@ class WorkerJsonRpcService(JsonRpcService):
     def start_listening(self):
         JsonRpcService.start_listening(self)
         address = self.port.getHost()
-        self.worker.set_process_info("%s:%d" % (address.host, address.port))
+        self.worker.set_process_info("%s:%d" % (getfqdn(), address.port))
