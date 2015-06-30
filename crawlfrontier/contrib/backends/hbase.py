@@ -225,6 +225,7 @@ class HBaseQueue(object):
         pass
 
     def set_job_id(self, job_id):
+        self.logger.info("New job id set in HbaseQueue %d" % job_id)
         self.job_id = job_id
 
 
@@ -283,6 +284,7 @@ class HBaseState(object):
 
     def set_job_id(self, job_id):
         self.job_id = pack(">I", job_id)
+        self._state_cache.clear()
 
 
 class HBaseBackend(Backend):
