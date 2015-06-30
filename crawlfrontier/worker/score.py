@@ -87,6 +87,7 @@ class ScoringWorker(object):
         self.backend.fetch_states(list(fingerprints))
         fingerprints.clear()
         results = []
+        skipped = 0
         for msg in batch:
             if len(results) > 1024:
                 self._producer.send_messages(self.outgoing_topic, *results)
@@ -101,6 +102,7 @@ class ScoringWorker(object):
             if type == 'page_crawled':
                 _, response, links = msg
                 if response.meta['jid'] != self.job_id:
+                    skipped += 1
                     continue
                 results.extend(self.on_page_crawled(response, links))
                 continue
@@ -108,6 +110,7 @@ class ScoringWorker(object):
             if type == 'request_error':
                 _, request, error = msg
                 if request.meta['jid'] != self.job_id:
+                    skipped += 1
                     continue
                 results.extend(self.on_request_error(request, error))
                 continue
@@ -126,7 +129,7 @@ class ScoringWorker(object):
             logger.info("Succesfully reached the crawling goal. Exiting.")
             exit(0)
 
-        logger.info("Consumed %d items.", consumed)
+        logger.info("Consumed %d and skipped %d items.", consumed, skipped)
         self.stats['last_consumed'] = consumed
         self.stats['last_consumption_run'] = asctime()
 
@@ -151,7 +154,8 @@ class ScoringWorker(object):
                     seed.meta['fingerprint'],
                     score,
                     seed.url,
-                    True
+                    True,
+                    self.job_id
                 )
                 output.append(encoded)
         return output
@@ -173,7 +177,8 @@ class ScoringWorker(object):
                     obj.meta['fingerprint'],
                     score,
                     obj.url,
-                    True
+                    True,
+                    self.job_id
                 )
                 output.append(encoded)
         return output       
@@ -189,7 +194,8 @@ class ScoringWorker(object):
                 request.meta['fingerprint'],
                 score,
                 request.url,
-                False
+                False,
+                self.job_id
             )
             return [encoded]
         return []
