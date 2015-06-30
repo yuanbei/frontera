@@ -52,7 +52,8 @@ class ResponseConverter(BaseResponseConverter):
                                 headers=response.headers,
                                 body=response.body,
                                 request=response.meta['frontier_request'])
-        for key in ['redirect_urls', 'redirect_ttl', 'redirect_times', 'dont_redirect', 'p_score']:
+        for key in ['redirect_urls', 'redirect_ttl', 'redirect_times', 'dont_redirect',
+                    'p_score', 'title', 'descr', 'keywords']:
             if key in response.meta:
                 obj.meta[key] = response.meta[key]
         return obj
