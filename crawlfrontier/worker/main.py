@@ -103,6 +103,7 @@ class FrontierWorker(object):
 
     def consume_incoming(self, *args, **kwargs):
         consumed = 0
+        skipped = 0
         try:
             for m in self._in_consumer.get_messages(count=self.consumer_batch_size, block=True, timeout=1.0):
                 try:
@@ -123,6 +124,7 @@ class FrontierWorker(object):
                         _, response, links = msg
                         logger.debug("Page crawled %s", response.url)
                         if response.meta['jid'] != self.job_id:
+                            skipped += 1
                             continue
 
                         # FIXME: a dirty hack
@@ -136,6 +138,7 @@ class FrontierWorker(object):
                     if type == 'request_error':
                         _, request, error = msg
                         if request.meta['jid'] != self.job_id:
+                            skipped += 1
                             continue
                         logger.info("Request error %s", request.url)
                         self._backend.request_error(request, error)
@@ -146,7 +149,7 @@ class FrontierWorker(object):
             self._in_consumer.seek(0, 2)  # moving to the tail of the log
             logger.info("Caught OffsetOutOfRangeError, moving to the tail of the log.")
 
-        logger.info("Consumed %d items.", consumed)
+        logger.info("Consumed %d, skipped %d items.", consumed, skipped)
         self.stats['last_consumed'] = consumed
         self.stats['last_consumption_run'] = asctime()
         self.slot.schedule()
@@ -154,9 +157,10 @@ class FrontierWorker(object):
 
     def consume_scoring(self, *args, **kwargs):
         consumed = 0
+        skipped = 0
         try:
             batch = {}
-            for m in self._scoring_consumer.get_messages(count=1024):
+            for m in self._scoring_consumer.get_messages(count=4096):
                 try:
                     msg = self._decoder.decode(m.message.value)
                 except (KeyError, TypeError), e:
@@ -164,7 +168,10 @@ class FrontierWorker(object):
                     continue
                 else:
                     if msg[0] == 'update_score':
-                        _, fprint, score, url, schedule = msg
+                        _, fprint, score, url, schedule, job_id = msg
+                        if job_id != self.job_id:
+                            skipped += 1
+                            continue
                         batch[fprint] = (score, url, schedule)
                     if msg[0] == 'new_job_id':
                         self.job_id = msg[1]
@@ -176,7 +183,7 @@ class FrontierWorker(object):
             self._scoring_consumer.seek(0, 2)  # moving to the tail of the log
             logger.info("Caught OffsetOutOfRangeError, moving to the tail of the log.")
 
-        logger.info("Consumed %d items during scoring consumption.", consumed)
+        logger.info("Consumed %d items, skipped %d during scoring consumption.", consumed, skipped)
         self.stats['last_consumed_scoring'] = consumed
         self.stats['last_consumption_run_scoring'] = asctime()
         self.slot.schedule()
