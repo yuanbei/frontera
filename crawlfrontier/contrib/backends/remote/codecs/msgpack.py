@@ -2,25 +2,26 @@
 from __future__ import absolute_import
 from msgpack import packb, unpackb
 
+def _serialize(obj):
+    """Recursively walk object's hierarchy."""
+    if isinstance(obj, (bool, int, long, float, basestring)):
+      return obj
+    elif isinstance(obj, dict):
+      obj = obj.copy()
+      for key in obj:
+        obj[key] = _serialize(obj[key])
+      return obj
+    elif isinstance(obj, list):
+      return [_serialize(item) for item in obj]
+    elif isinstance(obj, tuple):
+      return tuple(_serialize([item for item in obj]))
+    elif hasattr(obj, '__dict__'):
+      return _serialize(obj.__dict__)
+    else:
+      return None
+
 def _prepare_request_message(request):
-    def serialize(obj):
-        """Recursively walk object's hierarchy."""
-        if isinstance(obj, (bool, int, long, float, basestring)):
-          return obj
-        elif isinstance(obj, dict):
-          obj = obj.copy()
-          for key in obj:
-            obj[key] = serialize(obj[key])
-          return obj
-        elif isinstance(obj, list):
-          return [serialize(item) for item in obj]
-        elif isinstance(obj, tuple):
-          return tuple(serialize([item for item in obj]))
-        elif hasattr(obj, '__dict__'):
-          return serialize(obj.__dict__)
-        else:
-          return None
-    return [request.url, request.headers, request.cookies, serialize(request.meta)]
+    return [request.url, request.headers, request.cookies, _serialize(request.meta)]
 
 def _prepare_response_message(response):
     return [response.url, response.status_code, response.meta]
@@ -42,8 +43,8 @@ class Encoder(object):
     def encode_request(self, request):
         return packb(_prepare_request_message(request))
 
-    def encode_update_score(self, fingerprint, score, url, schedule):
-        return packb(['us', fingerprint, score, url, schedule])
+    def encode_update_score(self, fingerprint, score, url, schedule, job_id):
+        return packb(['us', fingerprint, score, url, schedule, job_id])
 
     def encode_new_job_id(self, job_id):
         return packb(['njid', int(job_id)])
@@ -73,7 +74,7 @@ class Decoder(object):
                     self._response_from_object(obj[1]),
                     map(self._request_from_object, obj[2]))
         if obj[0] == 'us':
-            return ('update_score', str(obj[1]), obj[2], str(obj[3]), obj[4])
+            return ('update_score', str(obj[1]), obj[2], str(obj[3]), obj[4], int(obj[5]))
         if obj[0] == 're':
             return ('request_error', self._request_from_object(obj[1]), obj[2])
         if obj[0] == 'as':
