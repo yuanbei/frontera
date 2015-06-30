@@ -45,6 +45,7 @@ class ScoringWorker(object):
         self.job_id = 0
         self.backend.set_job_id(self.job_id)
         self._manager.start()
+        self.is_finishing = False
 
     def work(self):
         consumed = 0
@@ -126,17 +127,16 @@ class ScoringWorker(object):
         self.cache_flush_counter += 1
 
         if self.strategy.finished():
-            logger.info("Succesfully reached the crawling goal. Exiting.")
-            exit(0)
+            logger.info("Succesfully reached the crawling goal.")
+            self.on_finished()
 
         logger.info("Consumed %d and skipped %d items.", consumed, skipped)
         self.stats['last_consumed'] = consumed
         self.stats['last_consumption_run'] = asctime()
 
     def run(self):
-        while True:
+        while not self.is_finishing:
             self.work()
-
 
     def on_add_seeds(self, seeds):
         logger.info('Adding %i seeds', len(seeds))
@@ -199,6 +199,10 @@ class ScoringWorker(object):
             )
             return [encoded]
         return []
+
+    def on_finished(self):
+        self.is_finishing = True
+
 
 if __name__ == '__main__':
     parser = ArgumentParser(description="Crawl frontier scoring worker.")
