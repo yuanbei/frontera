@@ -1,7 +1,8 @@
 import com.google.protobuf.ByteString;
-import com.scrapinghub.frontera.hbasestats.HbaseQueue;
 import com.scrapinghub.frontera.hbasestats.QueueRecordOuter;
 import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang.ArrayUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.Path;
@@ -10,6 +11,8 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hadoop.hbase.filter.PrefixFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
 import org.apache.hadoop.hbase.mapreduce.TableMapper;
@@ -20,26 +23,39 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.msgpack.MessagePack;
 import org.msgpack.annotation.Message;
 import org.msgpack.packer.Packer;
-import org.msgpack.template.Template;
+import org.msgpack.type.ArrayValue;
+import org.msgpack.type.Value;
+import org.msgpack.unpacker.Converter;
+import org.msgpack.unpacker.Unpacker;
+import org.msgpack.unpacker.UnpackerIterator;
+import sun.misc.*;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.IOException;
+import java.io.*;
 import java.nio.ByteBuffer;
+import java.security.MessageDigest;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
-import static org.msgpack.template.Templates.tList;
 
 public class ShuffleQueueJob extends Configured implements Tool {
-    public static class HostsDumpMapper extends TableMapper<BytesWritable, BytesWritable> {
-        public static enum Counters {FINGERPRINTS_COUNT}
+    @Message
+    public static class QueueItem {
+        public byte[] fingerprint;
+        public int hostCrc32;
+        public String url;
+        public float score;
+    }
+
+    public static class HostsDumpMapper extends TableMapper<IntWritable, BytesWritable> {
+        public enum Counters {FINGERPRINTS_COUNT}
+        private MessagePack msgPack = new MessagePack();
 
         public void map(ImmutableBytesWritable row, Result value, Context context) throws InterruptedException, IOException {
             String rk = new String(row.get(), row.getOffset(), row.getLength(), "US-ASCII");
@@ -54,19 +70,26 @@ public class ShuffleQueueJob extends Configured implements Tool {
                 builder.setStartInterval(Float.parseFloat(intervals[0]));
                 builder.setEndInterval(Float.parseFloat(intervals[1]));
 
+                if (c.getValueLength() == 0)
+                    continue;
                 ByteArrayInputStream bis = new ByteArrayInputStream(c.getValueArray(), c.getValueOffset(), c.getValueLength());
-                DataInputStream input = new DataInputStream(bis);
-                byte[] fingerprint = new byte[20];
-                byte[] hostCrc32 = new byte[4];
-                int blobsCount = input.readInt();
-                for (int i = 0; i < blobsCount; i++) {
-                    if (input.read(fingerprint) == -1)
-                        break;
-                    builder.setFingerprint(ByteString.copyFrom(fingerprint));
-                    if (input.read(hostCrc32) == -1)
-                        break;
-                    builder.setHostCrc32(ByteBuffer.wrap(hostCrc32).getInt());
-                    BytesWritable key = new BytesWritable(hostCrc32);
+                Unpacker unpacker = msgPack.createUnpacker(bis);
+                for (Value raw: unpacker) {
+                    QueueItem item = new QueueItem();
+                    if (!raw.isArrayValue())
+                        continue;
+                    ArrayValue array = raw.asArrayValue();
+                    item.fingerprint = array.get(0).asRawValue().getByteArray();
+                    item.hostCrc32 = array.get(1).asIntegerValue().getInt();
+                    item.url = array.get(2).asRawValue().getString();
+                    item.score = array.get(3).asFloatValue().getFloat();
+
+                    builder.setFingerprint(ByteString.copyFrom(item.fingerprint));
+                    builder.setHostCrc32(item.hostCrc32);
+                    builder.setUrl(item.url);
+                    builder.setScore(item.score);
+
+                    IntWritable key = new IntWritable(item.hostCrc32);
                     BytesWritable val = new BytesWritable(builder.build().toByteArray());
                     context.write(key, val);
                     context.getCounter(Counters.FINGERPRINTS_COUNT).increment(1);
@@ -112,51 +135,7 @@ public class ShuffleQueueJob extends Configured implements Tool {
     }
 
     public static class BuildQueueReducerHbase extends TableReducer<IntWritable, BytesWritable, ImmutableBytesWritable> {
-        public static enum Counters {ITEMS_PRODUCED, ROWS_PUT}
-
-        public class BuildQueueHbaseProtobuf extends BuildQueue {
-            private final byte[] CF = "f".getBytes();
-            private byte[] salt = new byte[4];
-            private HbaseQueue.QueueItem.Builder item = HbaseQueue.QueueItem.newBuilder();
-            private HbaseQueue.QueueCell.Builder cell = HbaseQueue.QueueCell.newBuilder();
-
-            public void flushBuffer(Reducer.Context context, long timestamp) throws IOException, InterruptedException {
-                for (Map.Entry<String, List<QueueRecordOuter.QueueRecord>> entry : buffer.entrySet()) {
-                    List<QueueRecordOuter.QueueRecord> recordList = entry.getValue();
-                    cell.clear();
-                    RND.nextBytes(salt);
-                    String saltStr = new String(Hex.encodeHex(salt, true));
-                    String rk = String.format("%s_%d_%s", entry.getKey(), timestamp, saltStr);
-
-                    String column = null;
-                    for (QueueRecordOuter.QueueRecord record : recordList) {
-                        if (column == null)
-                            column = String.format("%.3f_%.3f", record.getStartInterval(), record.getEndInterval());
-                        item.clear();
-                        item.setFingerprint(record.getFingerprint());
-                        item.setHostCrc32(record.getHostCrc32());
-                        item.setScore(record.getScore());
-                        item.setUrl(record.getUrl());
-
-                        cell.addItems(item.build());
-                        context.getCounter(Counters.ITEMS_PRODUCED).increment(1);
-                    }
-                    Put put = new Put(Bytes.toBytes(rk));
-                    put.add(CF, column.getBytes(), cell.build().toByteArray());
-                    context.write(null, put);
-                    context.getCounter(Counters.ROWS_PUT).increment(1);
-                }
-                buffer.clear();
-            }
-        }
-
-        @Message
-        public static class QueueItem {
-            public byte[] fingerprint;
-            public int hostCrc32;
-            public String url;
-            public float score;
-        }
+        public enum Counters {ITEMS_PRODUCED, ROWS_PUT}
 
         public class BuildQueueHbaseMsgPack extends BuildQueue {
             private final byte[] CF = "f".getBytes();
@@ -198,6 +177,7 @@ public class ShuffleQueueJob extends Configured implements Tool {
         final BuildQueueHbaseMsgPack buildQueue = new BuildQueueHbaseMsgPack();
         public void setup(Context context) throws IOException, InterruptedException {
             buildQueue.setup(context);
+            buildQueue.setPerHostLimit(100);
         }
 
         public void reduce(IntWritable hostCrc32, Iterable<BytesWritable> values, Context context) throws IOException, InterruptedException {
@@ -214,6 +194,7 @@ public class ShuffleQueueJob extends Configured implements Tool {
         config.set("frontera.hbase.namespace", args[0]);
 
         boolean rJob = runBuildQueueFromSequenceFile(args);
+        //boolean rJob = runDumpQueueToSequenceFile(args);
         if (!rJob)
             throw new Exception("Error during queue building.");
         return 0;
@@ -233,7 +214,7 @@ public class ShuffleQueueJob extends Configured implements Tool {
                 sourceTable,
                 scan,
                 HostsDumpMapper.class,
-                BytesWritable.class,
+                IntWritable.class,
                 BytesWritable.class,
                 job);
 
@@ -243,6 +224,31 @@ public class ShuffleQueueJob extends Configured implements Tool {
                 job);
         return job.waitForCompletion(true);
     }
+
+    private boolean runDumpQueueToSequenceFile(String[] args) throws Exception {
+            Configuration config = getConf();
+            Job job = Job.getInstance(config, "Dumping queue to sequence file.");
+            job.setJarByClass(ShuffleQueueJob.class);
+            Scan scan = new Scan();
+            scan.setCaching(500);
+            scan.setCacheBlocks(false);
+            String tableName = String.format("%s:%s", config.get("frontera.hbase.namespace"), args[1]);
+            TableMapReduceUtil.initTableMapperJob(
+                    tableName,
+                    scan,
+                    HostsDumpMapper.class,
+                    IntWritable.class,
+                    BytesWritable.class,
+                    job);
+
+            job.setOutputFormatClass(SequenceFileOutputFormat.class);
+            SequenceFileOutputFormat.setOutputPath(job, new Path(args[2]));
+            SequenceFileOutputFormat.setOutputCompressionType(job, SequenceFile.CompressionType.BLOCK);
+            job.setOutputKeyClass(IntWritable.class);
+            job.setOutputValueClass(BytesWritable.class);
+            job.setNumReduceTasks(0);
+            return job.waitForCompletion(true);
+        }
 
     private boolean runBuildQueueFromSequenceFile(String[] args) throws Exception {
         Configuration config = getConf();
@@ -275,7 +281,7 @@ public class ShuffleQueueJob extends Configured implements Tool {
                 tableName,
                 scan,
                 HostsDumpMapper.class,
-                BytesWritable.class,
+                IntWritable.class,
                 BytesWritable.class,
                 job);
 
