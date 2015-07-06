@@ -11,6 +11,7 @@ import java.util.*;
 public abstract class BuildQueue {
     Random RND = null;
     Map<String, List<QueueRecordOuter.QueueRecord>> buffer = null;
+    private int perHostLimit = -1;
 
     public void setup(Reducer.Context context) throws IOException, InterruptedException {
         buffer = new HashMap<String, List<QueueRecordOuter.QueueRecord>>();
@@ -19,6 +20,10 @@ public abstract class BuildQueue {
 
     private long getTimestamp() {
         return (System.currentTimeMillis() - 864000*1000) * 1000;
+    }
+
+    protected void setPerHostLimit(int documents) {
+        perHostLimit = documents;
     }
 
     public void reduce(Iterable<BytesWritable> values, Reducer.Context context) throws IOException, InterruptedException {
@@ -49,6 +54,9 @@ public abstract class BuildQueue {
 
             if (count % 1024 == 0)
                 timestamp += 15 * 60 * 1000 * 1000;
+
+            if (count > perHostLimit)
+                break;
         }
     }
 
