@@ -38,7 +38,7 @@ import java.util.Random;
 
 public class MergeAndBuildQueue extends Configured implements Tool {
     public static class QueueDumpMapper extends TableMapper<Text, BytesWritable> {
-        public static enum Counters {QUEUE_FINGERPRINTS_COUNT, METADATA_FINGERPRINTS_COUNT, URL_ABSENT_COUNT}
+        public enum Counters {QUEUE_FINGERPRINTS_COUNT, METADATA_FINGERPRINTS_COUNT, URL_ABSENT_COUNT}
         HbaseQueue.QueueItem.Builder itemBuilder = HbaseQueue.QueueItem.newBuilder();
 
         private void queueMap(ImmutableBytesWritable row, Result value, Context context) throws InterruptedException, IOException {
@@ -56,6 +56,7 @@ public class MergeAndBuildQueue extends Configured implements Tool {
 
                 ByteArrayInputStream bis = new ByteArrayInputStream(c.getValueArray(), c.getValueOffset(), c.getValueLength());
                 DataInputStream input = new DataInputStream(bis);
+                // FIXME: Update this to msgpack
                 byte[] fingerprint = new byte[20];
                 byte[] hostCrc32 = new byte[4];
                 int blobsCount = input.readInt();
@@ -137,7 +138,7 @@ public class MergeAndBuildQueue extends Configured implements Tool {
     }
 
     public static class MergingReducer extends Reducer<Text, BytesWritable, IntWritable, BytesWritable> {
-        public static enum Counters {EMPTY_RECORDS, NO_METADATA}
+        public enum Counters {EMPTY_RECORDS, NO_METADATA}
         Random RND = new Random();
 
         protected void reduce(Text key, Iterable<BytesWritable> values, Context context) throws IOException, InterruptedException {

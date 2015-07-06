@@ -48,16 +48,7 @@ public class QueueStatsJob extends Configured implements Tool {
             for (Cell c: value.rawCells()) {
                 ByteArrayInputStream bis = new ByteArrayInputStream(c.getValueArray(), c.getValueOffset(), c.getValueLength());
                 DataInputStream input = new DataInputStream(bis);
-                byte[] fingerprint = new byte[20];
-                int blobsCount = input.readInt();
-                for (int i = 0; i < blobsCount; i++) {
-                    if (input.read(fingerprint) == -1)
-                        break;
-                    if (input.readInt() == -1)
-                        break;
-                    BytesWritable key = new BytesWritable(fingerprint);
-                    context.write(key, NullWritable.get());
-                }
+
             }
         }
     }
@@ -66,7 +57,7 @@ public class QueueStatsJob extends Configured implements Tool {
         private BloomFilter<BytesWritable> fingerprints = null;
         private HashMap<String, Integer> hostStats = null;
 
-        public static enum Counters {MATCHED_RECORDS}
+        public enum Counters {MATCHED_RECORDS}
 
         protected void setup(Context context) throws IOException, InterruptedException {
             fingerprints = new BloomFilter<BytesWritable>(0.001, 100000000);
