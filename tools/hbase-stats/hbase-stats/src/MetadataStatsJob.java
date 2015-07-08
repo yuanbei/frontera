@@ -62,7 +62,7 @@ public class MetadataStatsJob extends Configured implements Tool {
             long sum = 0;
             for (IntWritable value: values)
                 sum += value.get();
-            context.write(key, new Text(String.format("d", sum)));
+            context.write(key, new Text(String.format("%d", sum)));
         }
     }
 
