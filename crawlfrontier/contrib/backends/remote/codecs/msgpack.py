@@ -22,19 +22,19 @@ def _prepare_request_message(request):
           return None
     return [request.url, request.headers, request.cookies, serialize(request.meta)]
 
-def _prepare_response_message(response):
-    return [response.url, response.status_code, response.meta]
+def _prepare_response_message(response, send_body):
+    return [response.url, response.status_code, response.meta, response.body if send_body else None]
 
 
 class Encoder(object):
     def __init__(self, request_model, *a, **kw):
-        pass
+        self.send_body = True if 'send_body' in kw and kw['send_body'] else False
 
     def encode_add_seeds(self, seeds):
         return packb(['as', map(_prepare_request_message, seeds)])
 
     def encode_page_crawled(self, response, links):
-        return packb(['pc', _prepare_response_message(response), map(_prepare_request_message, links)])
+        return packb(['pc', _prepare_response_message(response, self.send_body), map(_prepare_request_message, links)])
 
     def encode_request_error(self, request, error):
         return packb(['re', _prepare_request_message(request), str(error)])
@@ -57,8 +57,9 @@ class Decoder(object):
     def _response_from_object(self, obj):
         return self._response_model(url=obj[0],
                                     status_code=obj[1],
+                                    body=obj[3],
                                     request=self._request_model(url=obj[0],
-                                                                meta=obj[2]))
+                                                                meta=obj[2]                                                                ))
 
     def _request_from_object(self, obj):
         return self._request_model(url=obj[0],

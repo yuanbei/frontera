@@ -45,7 +45,8 @@ _pack_functions = {
     'state': lambda x: pack('>B', _state.get_id(x) if type(x) == str else x),
     'error': str,
     'domain_fingerprint': str,
-    'score': lambda x: pack('>f', x)
+    'score': lambda x: pack('>f', x),
+    'content': str
 }
 
 def unpack_score(blob):
@@ -55,7 +56,12 @@ def prepare_hbase_object(obj=None, **kwargs):
     if not obj:
         obj = dict()
     for k, v in kwargs.iteritems():
-        cf = 'm' if k not in ['score', 'state'] else 's'
+        if k in ['score', 'state']:
+            cf = 's'
+        elif k == 'content':
+            cf = 'c'
+        else:
+            cf = 'm'
         func = _pack_functions[k]
         obj[cf+':'+k] = func(v)
     return obj
@@ -280,8 +286,8 @@ class HBaseBackend(Backend):
         self._table_name = settings.get('HBASE_METADATA_TABLE', 'metadata')
         host = choice(hosts) if type(hosts) in [list, tuple] else hosts
 
-        self.connection = Connection(host=host, port=int(port), table_prefix=namespace, table_prefix_separator=':',
-                                     protocol='compact', transport='framed')
+        self.connection = Connection(host=host, port=int(port), table_prefix=namespace, table_prefix_separator=':')
+        # protocol='compact', transport='framed'
         self.queue = HBaseQueue(self.connection, self.queue_partitions, self.manager.logger.backend,
                                 drop=drop_all_tables)
         self.state_checker = HBaseState(self.connection, self._table_name)
@@ -295,7 +301,8 @@ class HBaseBackend(Backend):
         if self._table_name not in tables:
             self.connection.create_table(self._table_name, {'m': {'max_versions': 5}, # 'compression': 'SNAPPY'
                                                             's': {'max_versions': 1, 'block_cache_enabled': 1,
-                                                            'bloom_filter_type': 'ROW', 'in_memory': True, }
+                                                            'bloom_filter_type': 'ROW', 'in_memory': True, },
+                                                            'c': {'max_versions': 1}
                                                             })
         table = self.connection.table(self._table_name)
         self.batch = table.batch(batch_size=9216)
@@ -322,7 +329,7 @@ class HBaseBackend(Backend):
 
     def page_crawled(self, response, links):
         url, fingerprint, domain = self.manager.canonicalsolver.get_canonical_url(response)
-        obj = prepare_hbase_object(status_code=response.status_code)
+        obj = prepare_hbase_object(status_code=response.status_code, content=response.body)
 
         links_dict = dict()
         for link in links:

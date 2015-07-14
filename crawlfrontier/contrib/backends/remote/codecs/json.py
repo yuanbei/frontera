@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 from crawlfrontier.core.models import Request
 import json
+from base64 import b64decode, b64encode
 
 def _prepare_request_message(request):
     return {'url': request.url,
@@ -13,10 +14,11 @@ def _prepare_request_message(request):
 def _prepare_links_message(links):
     return [_prepare_request_message(link) for link in links]
 
-def _prepare_response_message(response):
+def _prepare_response_message(response, send_body):
     return {'url': response.url,
             'status_code': response.status_code,
-            'meta': response.meta}
+            'meta': response.meta,
+            'body': b64encode(response.body) if send_body else None}
 
 
 class CrawlFrontierJSONEncoder(json.JSONEncoder):
@@ -34,6 +36,7 @@ class CrawlFrontierJSONEncoder(json.JSONEncoder):
 class Encoder(CrawlFrontierJSONEncoder):
     def __init__(self, request_model, *a, **kw):
         super(Encoder, self).__init__(request_model, *a, **kw)
+        self.send_body = True if 'send_body' in kw and kw['send_body'] else False
 
     def encode_add_seeds(self, seeds):
         """
@@ -58,7 +61,7 @@ class Encoder(CrawlFrontierJSONEncoder):
         """
         return self.encode({
             'type': 'page_crawled',
-            'r': _prepare_response_message(response),
+            'r': _prepare_response_message(response, self.send_body),
             'links': _prepare_links_message(links)
         })
 
@@ -104,6 +107,7 @@ class Decoder(json.JSONDecoder):
                                       meta=obj['meta'])
         return self._response_model(url=obj['url'],
                      status_code=obj['status_code'],
+                     body=b64decode(obj['body']),
                      request=request)
 
     def _request_from_object(self, obj):
