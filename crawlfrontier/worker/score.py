@@ -28,7 +28,8 @@ class ScoringWorker(object):
                                        settings.get('INCOMING_TOPIC'),
                                        buffer_size=1048576,
                                        max_buffer_size=10485760,
-                                       partitions=[partition_id])
+                                       partitions=[partition_id],
+                                       auto_offset_reset='smallest')
 
         settings.set("AUTO_START", False)
         self._manager = FrontierManager.from_settings(settings)

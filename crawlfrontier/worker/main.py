@@ -68,13 +68,15 @@ class FrontierWorker(object):
                                        settings.get('FRONTIER_GROUP'),
                                        settings.get('INCOMING_TOPIC'),
                                        buffer_size=1048576,
-                                       max_buffer_size=10485760)
+                                       max_buffer_size=10485760,
+                                       auto_offset_reset='smallest')
         if not no_scoring:
             self._scoring_consumer = SimpleConsumer(self._kafka,
                                            settings.get('FRONTIER_GROUP'),
                                            settings.get('SCORING_TOPIC'),
                                            buffer_size=262144,
-                                           max_buffer_size=1048576)
+                                           max_buffer_size=1048576
+                                           )
 
         self._offset_fetcher = Fetcher(self._kafka, settings.get('OUTGOING_TOPIC'), settings.get('FRONTIER_GROUP'))
 
