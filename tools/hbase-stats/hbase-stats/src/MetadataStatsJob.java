@@ -24,6 +24,8 @@ import org.apache.hadoop.util.ToolRunner;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -32,21 +34,29 @@ public class MetadataStatsJob extends Configured implements Tool {
         private HashMap<String, Integer> hostStats = new HashMap<String, Integer>();
 
         public void map(ImmutableBytesWritable row, Result value, Context context) throws InterruptedException, IOException {
+            String rawUrl = null;
+            byte state = -1;
             for (Cell c: value.rawCells()) {
                 String qualifier = new String(c.getQualifierArray(), c.getQualifierOffset(), c.getQualifierLength());
-                if (qualifier.equals("url")) {
-                    String rawUrl = new String(c.getValueArray(), c.getValueOffset(), c.getValueLength());
-                    try {
-                        URL url = new URL(rawUrl);
-                        int count = 0;
-                        if (hostStats.containsKey(url.getHost()))
-                            count = hostStats.get(url.getHost());
-                        hostStats.put(url.getHost(), count + 1);
-                    } catch (MalformedURLException murl) {
-                        murl.printStackTrace(System.err);
-                        continue;
-                    }
-                    break;
+                if (qualifier.equals("url"))
+                    rawUrl = new String(c.getValueArray(), c.getValueOffset(), c.getValueLength());
+
+                if (qualifier.equals("state")) {
+                    ByteBuffer bb = ByteBuffer.wrap(c.getValueArray(), c.getValueOffset(), c.getValueLength());
+                    bb.order(ByteOrder.BIG_ENDIAN);
+                    state = bb.get();
+                }
+            }
+
+            if (state > 1 && rawUrl != null) {
+                try {
+                    URL url = new URL(rawUrl);
+                    int count = 0;
+                    if (hostStats.containsKey(url.getHost()))
+                        count = hostStats.get(url.getHost());
+                    hostStats.put(url.getHost(), count + 1);
+                } catch (MalformedURLException murl) {
+                    murl.printStackTrace(System.err);
                 }
             }
         }
