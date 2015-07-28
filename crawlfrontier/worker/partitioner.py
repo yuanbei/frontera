@@ -6,7 +6,7 @@ from kafka.partitioner.base import Partitioner
 
 
 class FingerprintPartitioner(Partitioner):
-    def partition(self, key, partitions):
+    def partition(self, key, partitions=None):
         size = len(self.partitions)
         digest = unhexlify(key[0:2] + key[5:7] + key[10:12] + key[15:17])
         value = unpack("<I", digest)
@@ -15,11 +15,11 @@ class FingerprintPartitioner(Partitioner):
 
 
 class Crc32NamePartitioner(Partitioner):
-    def partition(self, key, partitions):
+    def partition(self, key, partitions=None):
         value = crc32(key) if type(key) is str else crc32(key.encode('utf-8', 'ignore'))
-        return self.partition_by_hash(value, partitions)
+        return self.partition_by_hash(value)
 
-    def partition_by_hash(self, value, partitions):
+    def partition_by_hash(self, value):
         size = len(self.partitions)
         idx = value % size
         return self.partitions[idx]
