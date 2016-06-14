@@ -88,6 +88,7 @@ class Metadata(BaseMetadata):
             db_page.headers = obj.headers
             db_page.method = obj.method
             db_page.cookies = obj.cookies
+            db_page.body = obj.body
         elif isinstance(obj, Response):
             db_page.headers = obj.request.headers
             db_page.method = obj.request.method
@@ -170,7 +171,7 @@ class Queue(BaseQueue):
             for item in self._order_by(self.session.query(self.queue_model).filter_by(partition_id=partition_id)).\
                     limit(max_n_requests):
                 method = 'GET' if not item.method else str(item.method)
-                r = Request(item.url, method=method, meta=item.meta, headers=item.headers, cookies=item.cookies)
+                r = Request(item.url, method=method, meta=item.meta, headers=item.headers, body=item.body, cookies=item.cookies)
                 r.meta['fingerprint'] = str(item.fingerprint)
                 r.meta['score'] = item.score
                 results.append(r)
@@ -195,7 +196,7 @@ class Queue(BaseQueue):
                     partition_id = self.partitioner.partition(hostname, self.partitions)
                     host_crc32 = get_crc32(hostname)
                 q = self.queue_model(fingerprint=fprint, score=score, url=request.url, meta=request.meta,
-                                     headers=request.headers, cookies=request.cookies, method=request.method,
+                                     headers=request.headers, cookies=request.cookies, body=request.body, method=request.method,
                                      partition_id=partition_id, host_crc32=host_crc32, created_at=time()*1E+6)
                 to_save.append(q)
                 request.meta['state'] = States.QUEUED
@@ -264,7 +265,7 @@ class BroadCrawlingQueue(Queue):
             for item in items:
                 method = 'GET' if not item.method else str(item.method)
                 results.append(Request(item.url, method=method,
-                                       meta=item.meta, headers=item.headers, cookies=item.cookies))
+                                       meta=item.meta, headers=item.headers, body=item.body, cookies=item.cookies))
                 self.session.delete(item)
         self.session.commit()
         return results

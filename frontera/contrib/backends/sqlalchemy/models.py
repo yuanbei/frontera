@@ -27,6 +27,7 @@ class MetadataModel(DeclarativeBase):
     headers = Column(PickleType())
     cookies = Column(PickleType())
     method = Column(String(6))
+    body = Column(String(2048), nullable=True)
 
     @classmethod
     def query(cls, session):
@@ -78,6 +79,7 @@ class QueueModelMixin(object):
     method = Column(String(6))
     created_at = Column(BigInteger, index=True)
     depth = Column(SmallInteger)
+    body = Column(String(2048), nullable=True)
 
 
 class QueueModel(QueueModelMixin, DeclarativeBase):

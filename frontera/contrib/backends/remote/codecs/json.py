@@ -9,6 +9,7 @@ def _prepare_request_message(request):
     return {'url': request.url,
             'method': request.method,
             'headers': request.headers,
+            'body': request.body,
             'cookies': request.cookies,
             'meta': request.meta}
 
@@ -103,6 +104,7 @@ class Decoder(json.JSONDecoder, BaseDecoder):
         return self._request_model(url=obj['url'],
                                    method=obj['method'],
                                    headers=obj['headers'],
+                                   body=obj['body'],
                                    cookies=obj['cookies'],
                                    meta=obj['meta'])
 
@@ -134,6 +136,7 @@ class Decoder(json.JSONDecoder, BaseDecoder):
         return self._request_model(url=obj['url'],
                                    method=obj['method'],
                                    headers=obj['headers'],
+                                   body=obj['body'],
                                    cookies=obj['cookies'],
                                    meta=obj['meta'])
 
